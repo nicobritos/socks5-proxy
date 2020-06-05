@@ -1,0 +1,11 @@
+POST / HTTP/1.1
+Host: doh
+User-Agent: curl-doh/1.0
+Connection: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAMAAABkAARAAAAAAAIAAAAA
+Content-Type: application/dns-message
+Accept: application/dns-message
+Content-Length: 32
+
+.............www.google.com.....
