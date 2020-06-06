@@ -8,6 +8,8 @@
 #include <arpa/inet.h>
 #include "Practical.h"
 
+#define CHUNK 50
+
 //char http_header[] = "POST / HTTP/1.1\nHost: doh\nUser-Agent: curl-doh/1.0\nConnection: Upgrade, HTTP2-Settings\nUpgrade: h2c\nHTTP2-Settings: AAMAAABkAARAAAAAAAIAAAAA\nContent-Type: application/dns-message\nAccept: application/dns-message\nContent-Length: ";
 unsigned char http_header[] = {0x50, 0x4f, 0x53, 0x54, 0x20, 0x2f, 0x20, 0x48, 
 0x54, 0x54, 0x50, 0x2f, 0x31, 0x2e, 0x31, 0x0d, 
@@ -39,8 +41,8 @@ unsigned char http_header[] = {0x50, 0x4f, 0x53, 0x54, 0x20, 0x2f, 0x20, 0x48,
 0x65, 0x0d, 0x0a, 0x43, 0x6f, 0x6e, 0x74, 0x65, 
 0x6e, 0x74, 0x2d, 0x4c, 0x65, 0x6e, 0x67, 0x74, 
 0x68, 0x3a, 0x20};
-unsigned char dns_header[] = {0x0d, 0x0a, 0x0d,	0x68, 0x3a, 0x20, 0x33, 0x35, 0x11, 0x11, 0x01,	0x0a, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00,	0x00, 0x00, 0x00, 0x00, 0x00, 0x03}; 
-
+//unsigned char dns_header[] = {0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00}; 
+unsigned char dns_header[] = {0x0d, 0x0a, 0x0d, 0x0a, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00,  0x00, 0x00, 0x00, 0x00, 0x00};
 unsigned char dns_end[] = {0x00, 0x01, 0x00, 0x01};
 
 
@@ -54,18 +56,63 @@ for (; i < (from + n); i++)
 return i;
 }
 
+char * encodeName(int * size, char * name){
+    // Back up name 
+    size_t name_len = strlen(name);
+    char aux[name_len];
+    strcpy(aux,name);
+
+    char qname[CHUNK][CHUNK];
+    size_t j = 0;
+
+   // Extract the first token
+   char * token = strtok(aux, ".");
+   // loop through the string to extract all other tokens
+   while( token != NULL ) {
+      sprintf(qname[j++],"%s", token );
+      //printf("%s\n", token ); //printing each token
+      token = strtok(NULL, ".");
+   }
+    
+    char * result = malloc(CHUNK);
+    size_t k = 0;
+    for (size_t i = 0; i < j; i++){
+    size_t sub_len = strlen(qname[i]);
+    result[k++] = sub_len;
+    bincopy(result+k,qname[i],0,sub_len);
+    k+=sub_len;
+    }
+    result[k++]=0;
+
+    *size = k;
+    result = realloc(result,k);
+    return result;
+}
+
+
+
 size_t getRequest (int * len, char * name){
-char * request = malloc(300);
-size_t i = 0;
-i = bincopy(request,http_header,i,sizeof(http_header));
-request[i++]='3';
-request[i++]='5';
-i = bincopy(request,dns_header,i,sizeof(dns_header));
-i = bincopy(request,name,i,(strlen(name)+1));
-i = bincopy(request,dns_end,i,sizeof(dns_end));
-request = realloc(request,i);
-*len = i;
-return request;
+  char * request = malloc(300);
+  size_t i = 0;
+  i = bincopy(request,http_header,i,sizeof(http_header));
+
+  // encode name into dns message format 
+  int qname_len=0;
+  char * qname = encodeName(&qname_len,name);
+  //int dns_message_len = sizeof(dns_header) + qname_len + sizeof(dns_end);
+  int dns_message_len = (sizeof(dns_header) + qname_len + sizeof(dns_end) - 4);
+  char string_len[CHUNK]={0};
+  i = bincopy(request,string_len,i,sprintf(string_len,"%d",dns_message_len));
+  //request[i++]='3';
+  //request[i++]='5';
+  i = bincopy(request,dns_header,i,sizeof(dns_header));
+
+  i = bincopy(request,qname,i,qname_len);
+  i = bincopy(request,dns_end,i,sizeof(dns_end));
+  
+  request = realloc(request,i);
+  *len = i;
+  return request;
 }
 
 int main(int argc, char *argv[]) {
@@ -74,7 +121,7 @@ int main(int argc, char *argv[]) {
   int servPort = 80;
   
   int req_len =0;
-  char * echoString = getRequest(&req_len,"www.clarin.com.ar");
+  char * echoString = getRequest(&req_len,"itba.edu.ar");
 
 
   // Create a reliable, stream socket using TCP
