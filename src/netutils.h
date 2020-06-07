@@ -6,6 +6,7 @@
 #include "buffer.h"
 
 #define SOCKADDR_TO_HUMAN_MIN (INET6_ADDRSTRLEN + 5 + 1)
+
 /**
  * Describe de forma humana un sockaddr:
  *
@@ -20,7 +21,6 @@
 const char *
 sockaddr_to_human(char *buff, const size_t buffsize,
                   const struct sockaddr *addr);
-
 
 
 /**

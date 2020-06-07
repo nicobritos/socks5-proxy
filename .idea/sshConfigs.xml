@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SshConfigs">
+    <configs>
+      <sshConfig authType="PASSWORD" host="pampero.it.itba.edu.ar" id="58a1e05d-8f85-4a07-9050-c22035e17f2b" port="22" customName="Pampero" nameFormat="CUSTOM" username="nbritos" />
+    </configs>
+  </component>
+</project>
