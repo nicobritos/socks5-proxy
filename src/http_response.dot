@@ -1,0 +1,97 @@
+digraph g {
+    rankdir=LR;
+    size= "8.27,11.69";
+
+    node       [shape = circle];
+
+    START                       [label = "START"];
+    H                           [label = "H"];
+    T                           [label = "T"];
+    T_2                         [label = "T"];
+    P                           [label = "P"];
+    BAR                         [label = "/"];
+    ONE                         [label = "1"];
+    DOT                         [label = "."];
+    ONE_2                       [label = "1"];
+    SPACE                       [label = "SPACE"];
+    STATUS_CODE_1               [label = "STATUS_CODE_1"];
+    STATUS_CODE_2               [label = "STATUS_CODE_2"];
+    STATUS_CODE_3               [label = "STATUS_CODE_3"];
+    CODE_DESC                   [label = "CODE_DESC"];
+    CODE_DESC_POSSIBLE_END      [label = "CODE_DESC_POSSIBLE_END"];
+    HEADERS                     [label = "HEADERS"];
+    HEADER_POSSIBLE_END         [label = "HEADER_POSSIBLE_END"];
+    HEADER_END                  [label = "HEADER_END"];
+    HEADERS_POSSIBLE_END        [label = "HEADERS_POSSIBLE_END"];
+    DATA                        [label = "DATA"];
+    FINISHED                    [label = "FINISHED", shape = doublecircle];
+    INVALID_INPUT_FORMAT        [label = "INVALID_INPUT_FORMAT", shape = doublecircle];
+
+
+
+    START -> H                                          [label= "'H'"];
+    START -> INVALID_INPUT_FORMAT                       [label="ANY"];
+
+    H -> T                                              [label= "'T'"];
+    H -> INVALID_INPUT_FORMAT                           [label="ANY"];
+
+    T -> T_2                                            [label= "'T'"];
+    T -> INVALID_INPUT_FORMAT                           [label="ANY"];
+
+    T_2 -> P                                            [label= "'P'"];
+    T_2 -> INVALID_INPUT_FORMAT                         [label="ANY"];
+
+    P -> BAR                                            [label= "'/'"];
+    P -> INVALID_INPUT_FORMAT                           [label="ANY"];
+
+    BAR -> ONE                                          [label= "'1'"];
+    BAR -> INVALID_INPUT_FORMAT                         [label="ANY"];
+
+    ONE -> DOT                                          [label= "'.'"];
+    ONE -> INVALID_INPUT_FORMAT                         [label="ANY"];
+
+    DOT -> ONE_2                                        [label= "'1'"];
+    DOT -> INVALID_INPUT_FORMAT                         [label="ANY"];
+
+    ONE_2 -> SPACE                                      [label= "' '"];
+    ONE_2 -> INVALID_INPUT_FORMAT                       [label="ANY"];
+
+    SPACE -> STATUS_CODE_1                              [label="['1'-'5']"];
+    SPACE -> INVALID_INPUT_FORMAT                       [label="ANY"];
+
+    STATUS_CODE_1 -> STATUS_CODE_2                      [label= "['0'-'9']"];
+    STATUS_CODE_1 -> INVALID_INPUT_FORMAT               [label="ANY"];
+    
+    STATUS_CODE_2 -> STATUS_CODE_3                      [label= "['0'-'9']"];
+    STATUS_CODE_2 -> INVALID_INPUT_FORMAT               [label="ANY"];
+
+    STATUS_CODE_3 -> CODE_DESC                          [label= "' '"];
+    STATUS_CODE_3 -> INVALID_INPUT_FORMAT               [label="ANY"];
+    
+    CODE_DESC -> CODE_DESC_POSSIBLE_END                 [label="'\\r'"];
+    CODE_DESC -> INVALID_INPUT_FORMAT                   [label="'\\0'"]
+    CODE_DESC -> CODE_DESC                              [label="ANY"];
+
+    CODE_DESC_POSSIBLE_END -> HEADERS                   [label="'\\n'"];
+    CODE_DESC_POSSIBLE_END -> INVALID_INPUT_FORMAT      [label="'\\0'"]
+    CODE_DESC_POSSIBLE_END -> CODE_DESC                 [label="ANY"] 
+
+    HEADERS -> HEADER_POSSIBLE_END                      [label="'\\r'"]
+    HEADERS -> INVALID_INPUT_FORMAT                     [label="'\\0'"]
+    HEADERS -> HEADERS                                  [label="ANY"]
+
+    HEADER_POSSIBLE_END -> HEADER_END                   [label="'\\n'"]
+    HEADER_POSSIBLE_END -> INVALID_INPUT_FORMAT         [label="'\\0'"]
+    HEADER_POSSIBLE_END -> HEADERS                      [label="ANY"]
+
+    HEADER_END -> HEADERS_POSSIBLE_END                  [label="'\\r'"]
+    HEADER_END -> INVALID_INPUT_FORMAT                  [label="'\\0'"]
+    HEADER_END -> HEADERS                               [label="ANY"]
+
+    HEADERS_POSSIBLE_END -> DATA                        [label="'\\n'"]
+    HEADERS_POSSIBLE_END -> INVALID_INPUT_FORMAT        [label="'\\0'"]
+    HEADERS_POSSIBLE_END -> HEADERS                     [label="ANY"]
+    
+    DATA -> DATA                                        [label="ANY"];
+    DATA -> FINISHED                                    [label="'\\0'"];
+}
