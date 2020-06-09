@@ -7,10 +7,10 @@
 #define CHUNK_SIZE 10
 
 /* Funciones auxiliares */
-void * resize_if_needed(const void * ptr, size_t ptr_size, size_t current_length);
+void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length);
 struct http_response * add_char_to_data(struct http_response * ans, char c, size_t * data_current_length);
 struct http_response * add_char_to_code_description(struct http_response * ans, char c, size_t * code_description_current_length);
-struct http_response * error(error_t error_type, struct http_response * ans);
+struct http_response * error(struct http_response * ans, error_t error_type);
 
 // definición de maquina
 
@@ -256,9 +256,10 @@ static const struct parser_state_transition *states [] = {
     T,
     T_2,
     P,
+    BAR,
     ONE,
     DOT,
-    ONE,
+    ONE_2,
     SPACE,
     STATUS_1,
     STATUS_2,
@@ -267,6 +268,7 @@ static const struct parser_state_transition *states [] = {
     CODE_DESC_POSSIBLE_END,
     HEADER,
     HEADER_POSSIBLE_END,
+    HEADER_END,
     HEADERS_POSSIBLE_END,
     DATA,
 };
@@ -279,9 +281,10 @@ static const size_t states_n [] = {
     N(T),
     N(T_2),
     N(P),
+    N(BAR),
     N(ONE),
     N(DOT),
-    N(ONE),
+    N(ONE_2),
     N(SPACE),
     N(STATUS_1),
     N(STATUS_2),
@@ -290,6 +293,7 @@ static const size_t states_n [] = {
     N(CODE_DESC_POSSIBLE_END),
     N(HEADER),
     N(HEADER_POSSIBLE_END),
+    N(HEADER_END),
     N(HEADERS_POSSIBLE_END),
     N(DATA),
 };
@@ -361,7 +365,7 @@ void free_http_response(struct http_response * ans){
 struct http_response * add_char_to_code_description(struct http_response * ans, char c, size_t * code_description_current_length){
     ans->code_description = resize_if_needed(ans->code_description, sizeof(*(ans->code_description)), *code_description_current_length);
     if(ans->code_description == NULL){
-        return error(REALLOC_ERROR, ans);
+        return error(ans, REALLOC_ERROR);
     }
     ans->code_description[(*code_description_current_length)++] = c;
     return ans;
@@ -370,13 +374,13 @@ struct http_response * add_char_to_code_description(struct http_response * ans, 
 struct http_response * add_char_to_data(struct http_response * ans, char c, size_t * data_current_length){
     ans->data = resize_if_needed(ans->data, sizeof(*(ans->data)), *data_current_length);
     if(ans->data == NULL){
-        return error(REALLOC_ERROR, ans);
+        return error(ans, REALLOC_ERROR);
     }
     ans->data[(*data_current_length)++] = c;
     return ans;
 }
 
-struct http_response * error(error_t error_type, struct http_response * ans){
+struct http_response * error(struct http_response * ans, error_t error_type){
     free_http_response(ans);
     ans = malloc(sizeof(*ans));
     ans->data = NULL;
@@ -385,7 +389,7 @@ struct http_response * error(error_t error_type, struct http_response * ans){
     return ans;
 }
 
-void * resize_if_needed(const void * ptr, size_t ptr_size, size_t current_length){
+void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length){
     if(current_length % CHUNK_SIZE == 0){
         return realloc(ptr, ptr_size * (current_length + CHUNK_SIZE));
     }
