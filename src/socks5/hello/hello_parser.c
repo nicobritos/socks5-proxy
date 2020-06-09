@@ -4,25 +4,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "hello.h"
+#include "hello_parser.h"
 
-extern void
-hello_parser_init(struct hello_parser *p) {
+void hello_parser_init(struct hello_parser *p) {
     p->state = hello_version;
     p->remaining = 0;
 }
 
-extern enum hello_state
-hello_parser_feed(struct hello_parser *p, const uint8_t b) {
+enum hello_state hello_parser_feed(struct hello_parser *p, const uint8_t b) {
     switch (p->state) {
         case hello_version:
-            if (0x05 == b) {
+            if (b == 0x05) {
                 p->state = hello_nmethods;
             } else {
                 p->state = hello_error_unsupported_version;
             }
             break;
-
         case hello_nmethods:
             p->remaining = b;
             p->state = hello_methods;
@@ -30,11 +27,9 @@ hello_parser_feed(struct hello_parser *p, const uint8_t b) {
             if (p->remaining <= 0) {
                 p->state = hello_done;
             }
-
             break;
-
         case hello_methods:
-            if (NULL != p->on_authentication_method) {
+            if (p->on_authentication_method != NULL) {
                 p->on_authentication_method(p, b);
             }
             p->remaining--;
@@ -47,53 +42,34 @@ hello_parser_feed(struct hello_parser *p, const uint8_t b) {
             // nada que hacer, nos quedamos en este estado
             break;
         default:
-            fprintf(stderr, "unknown state %d\n", p->state);
+            fprintf(stderr, "unknown hello_state %d\n", p->state);
             abort();
     }
 
     return p->state;
 }
 
-extern bool
-hello_is_done(const enum hello_state state, bool *errored) {
-    bool ret;
+bool hello_is_done(const enum hello_state state, bool *errored) {
     switch (state) {
         case hello_error_unsupported_version:
-            if (0 != errored) {
-                *errored = true;
-            }
+            if (errored != NULL) *errored = true;
             /* no break */
         case hello_done:
-            ret = true;
-            break;
+            return true;
         default:
-            ret = false;
-            break;
+            return false;
     }
-    return ret;
 }
 
-extern const char *
-hello_error(const struct hello_parser *p) {
-    char *ret;
-    switch (p->state) {
-        case hello_error_unsupported_version:
-            ret = "unsupported version";
-            break;
-        default:
-            ret = "";
-            break;
-    }
-    return ret;
+const char *hello_error(const struct hello_parser *p) {
+    return p->state == hello_error_unsupported_version ? "unsupported version" : "";
 }
 
-extern void
-hello_parser_close(struct hello_parser *p) {
+void hello_parser_close(struct hello_parser *p) {
     /* no hay nada que liberar */
 }
 
-extern enum hello_state
-hello_consume(buffer *b, struct hello_parser *p, bool *errored) {
+enum hello_state hello_consume(buffer *b, struct hello_parser *p, bool *errored) {
     enum hello_state st = p->state;
 
     while (buffer_can_read(b)) {
@@ -106,8 +82,7 @@ hello_consume(buffer *b, struct hello_parser *p, bool *errored) {
     return st;
 }
 
-extern int
-hello_marshall(buffer *b, const uint8_t method) {
+int hello_marshall(buffer *b, const uint8_t method) {
     size_t n;
     uint8_t *buff = buffer_write_ptr(b, &n);
     if (n < 2) {
@@ -118,4 +93,3 @@ hello_marshall(buffer *b, const uint8_t method) {
     buffer_write_adv(b, 2);
     return 2;
 }
-
