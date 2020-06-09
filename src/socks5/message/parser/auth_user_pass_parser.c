@@ -10,9 +10,7 @@
 
 /** inicializa el parser */
 void auth_user_pass_parser_init(struct auth_user_pass_parser *p) {
-    if (p == NULL)
-        return;
-    p->credentials_ok = false;
+    if (p == NULL) return;
     p->_username = p->_password = NULL;
     p->_username_length = p->_username_index = 0;
     p->_password_length = p->_password_index = 0;
@@ -27,7 +25,7 @@ enum auth_user_pass_state auth_user_pass_parser_feed(struct auth_user_pass_parse
             break;
         case auth_user_pass_user_len:
             if (b != 0) {
-                if ((p->_username = malloc(b)) == NULL) {
+                if ((p->_username = malloc(b + 1)) == NULL) {
                     p->_state = auth_user_pass_error_no_memory;
                 } else {
                     p->_username_index = 0;
@@ -41,12 +39,14 @@ enum auth_user_pass_state auth_user_pass_parser_feed(struct auth_user_pass_parse
             break;
         case auth_user_pass_user:
             p->_username[p->_username_index++] = b;
-            if (p->_username_index == p->_username_length)
+            if (p->_username_index == p->_username_length) {
+                p->_username[p->_username_index + 1] = '\0';
                 p->_state = auth_user_pass_pass_len;
+            }
             break;
         case auth_user_pass_pass_len:
             if (b != 0) {
-                if ((p->_password = malloc(b)) == NULL) {
+                if ((p->_password = malloc(b + 1)) == NULL) {
                     p->_state = auth_user_pass_error_no_memory;
                 } else {
                     p->_password_index = 0;
@@ -61,10 +61,8 @@ enum auth_user_pass_state auth_user_pass_parser_feed(struct auth_user_pass_parse
         case auth_user_pass_pass:
             p->_password[p->_password_index++] = b;
             if (p->_password_index == p->_password_length) {
+                p->_username[p->_password_index + 1] = '\0';
                 p->_state = auth_user_pass_ok;
-                if (p->do_login != NULL) {
-                    p->do_login(p, p->_username, p->_username_length, p->_password, p->_password_length);
-                }
             }
             break;
         case auth_user_pass_ok:
@@ -113,6 +111,22 @@ bool auth_user_pass_parser_is_done(enum auth_user_pass_state state, bool *errore
         return true;
     }
     return false;
+}
+
+/**
+ * Setea las credenciales
+ * @param parser el parser que contiene los datos
+ * @param credentials el struct donde guardara las credenciales
+ * @return true si se guardaron, false sino
+ */
+bool auth_user_pass_parser_set_credentials(const struct auth_user_pass_parser *parser, struct auth_user_pass_credentials *credentials) {
+    if (!auth_user_pass_parser_is_done(parser->_state, NULL))
+        return false;
+
+    credentials->username = parser->_username;
+    credentials->username_length = parser->_username_length;
+    credentials->password = parser->_password;
+    return true;
 }
 
 /**

@@ -4,7 +4,13 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "../../buffer.h"
+#include "../../../buffer.h"
+#include "../auth_user_pass_helper.h"
+
+#define AUTH_USER_PASS_DEFAULT_USER "root"
+#define AUTH_USER_PASS_DEFAULT_USER_LENGTH 4
+#define AUTH_USER_PASS_DEFAULT_PASS "root"
+#define AUTH_USER_PASS_DEFAULT_PASS_LENGTH 4
 
 /**
  * Once the SOCKS V5 server has started, and the client has selected the
@@ -47,22 +53,13 @@ enum auth_user_pass_state {
 };
 
 struct auth_user_pass_parser {
-    /** Invocado cuando se obtiene el username y password */
-    void (*do_login) (
-            struct auth_user_pass_parser *parser,
-            const char *username, const uint8_t username_length,
-            const char *password, const uint8_t password_length
-    );
-    bool credentials_ok;
-
-    /******** zona privada *****************/
     enum auth_user_pass_state _state;
-    uint8_t _username_index;
-    uint8_t _password_index;
-    uint8_t _username_length;
-    uint8_t _password_length;
     char *_username;
     char *_password;
+    uint8_t _username_length;
+    uint8_t _password_length;
+    uint8_t _username_index;
+    uint8_t _password_index;
 };
 
 /** inicializa el parser */
@@ -89,11 +86,18 @@ enum auth_user_pass_state auth_user_pass_parser_consume(buffer *b, struct auth_u
 bool auth_user_pass_parser_is_done(enum auth_user_pass_state state, bool *errored);
 
 /**
+ * Setea las credenciales
+ * @param parser el parser que contiene los datos
+ * @param credentials el struct donde guardara las credenciales
+ * @return true si se guardaron, false sino
+ */
+bool auth_user_pass_parser_set_credentials(const struct auth_user_pass_parser *parser, struct auth_user_pass_credentials *credentials);
+
+/**
  * En caso de que se haya llegado a un estado de error, permite obtener una
  * representación textual que describe el problema
  */
 const char *auth_user_pass_parser_error(const struct auth_user_pass_parser *p);
-
 
 /** libera recursos internos del parser */
 void auth_user_pass_parser_close(struct auth_user_pass_parser *p);

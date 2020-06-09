@@ -3,7 +3,7 @@
 #include <check.h>
 
 #include "hello_parser.h"
-#include "../../tests.h"
+#include "../../../tests.h"
 
 #define FIXBUF(b, data) buffer_init(&(b), N(data), (data)); \
                         buffer_write_adv(&(b), N(data))
@@ -124,7 +124,7 @@ hello_suite(void) {
     s = suite_create("socks");
 
     /* Core test case */
-    tc = tcase_create("hello");
+    tc = tcase_create("parser");
 
     tcase_add_test(tc, test_hello_normal);
     tcase_add_test(tc, test_hello_no_methods);

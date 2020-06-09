@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "../../buffer.h"
+#include "../../../buffer.h"
 
 #define SOCKS_HELLO_METHOD_NO_AUTHENTICATION_REQUIRED 0x00
 #define SOCKS_HELLO_METHOD_USERNAME_PASSWORD 0x02
@@ -25,7 +25,7 @@
  *  appear in the METHODS field.
  */
 /* no es un ADT/CDT para no evitar malloc/free */
-/** estado del parser de hello request */
+/** estado del parser de parser request */
 
 enum hello_state {
     hello_version,
@@ -83,7 +83,7 @@ const char *hello_error(const struct hello_parser *p);
 void hello_parser_close(struct hello_parser *p);
 
 /**
- * serializa en buff la una respuesta al hello.
+ * serializa en buff la una respuesta al parser.
  *
  * Retorna la cantidad de bytes ocupados del buffer o -1 si no había
  * espacio suficiente.

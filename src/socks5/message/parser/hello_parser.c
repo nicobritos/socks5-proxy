@@ -1,5 +1,5 @@
 /**
- * request.c -- parser del hello de SOCKS5
+ * request.c -- parser del parser de SOCKS5
  */
 #include <stdio.h>
 #include <stdlib.h>
