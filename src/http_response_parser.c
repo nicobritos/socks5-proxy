@@ -310,7 +310,8 @@ struct http_response * http_response_parser(char * s){
     struct http_response * ans = calloc(1, sizeof(*ans));
     size_t code_description_current_length = 0;
     size_t data_current_length = 0;
-    for(int i = 0; s[i]; i++){
+    char finish = 0;
+    for(int i = 0; !finish; i++){
         struct parser_event* ret = parser_feed(parser, s[i]);
         switch (ret->type){
             case COPY_STATUS_1:
@@ -341,10 +342,11 @@ struct http_response * http_response_parser(char * s){
             break;
             case END_COPY_DATA:
                 add_char_to_data(ans, '\0', &data_current_length);
-                ans->code_description = realloc(ans->code_description, sizeof(*(ans->data)) * data_current_length); // acorto el string si le sobra espacio
-                if(ans->code_description == NULL){
+                ans->data = realloc(ans->data, sizeof(*(ans->data)) * data_current_length); // acorto el string si le sobra espacio
+                if(ans->data == NULL){
                     return error(ans, REALLOC_ERROR);
                 }
+                finish = 1;
             break;
             case INVALID_INPUT_FORMAT:
                 return error(ans, INVALID_INPUT_FORMAT_ERROR);
@@ -409,8 +411,8 @@ void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length){
 int main(int argc, char ** argv){
     FILE * fp;
     char c;
-    int size = 100000;
-    char *buffer = malloc(size * sizeof(*buffer));
+    int size = 1000;
+    char *buffer = calloc(1,size * sizeof(*buffer));
     if(buffer == NULL){
         return 1;
     }
