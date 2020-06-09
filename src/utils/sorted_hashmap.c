@@ -231,6 +231,15 @@ static void sorted_hashmap_free_starting_node_(sorted_hashmap_node node) {
 }
 
 /**
+ * @param hashmap
+ * @return cantidad de nodos
+ */
+uint64_t sorted_hashmap_get_total_nodes(sorted_hashmap_t hashmap) {
+    if (hashmap == NULL) return 0;
+    return hashmap->total_nodes;
+}
+
+/**
  * Setea la funcion de comparacion
  * @param hashmap
  * @param cmp la funcion de comparacion (sigue estandar C)

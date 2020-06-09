@@ -53,6 +53,11 @@ void sorted_hashmap_remove(sorted_hashmap_t hashmap, sorted_hashmap_node node);
  */
 void sorted_hashmap_free(sorted_hashmap_t hashmap);
 
+/**
+ * @param hashmap
+ * @return cantidad de nodos
+ */
+uint64_t sorted_hashmap_get_total_nodes(sorted_hashmap_t hashmap);
 
 /**
  * Setea la funcion de comparacion
