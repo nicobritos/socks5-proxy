@@ -351,6 +351,7 @@ struct http_response * http_response_parser(char * s){
             break;
         }
     }
+    parser_destroy(parser);
     return ans;
 }
 
@@ -408,16 +409,28 @@ void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length){
 int main(int argc, char ** argv){
     FILE * fp;
     char c;
-    char buffer[1000];
+    int size = 100000;
+    char *buffer = malloc(size * sizeof(*buffer));
+    if(buffer == NULL){
+        return 1;
+    }
     if(argc != 2){
         return 1;
     }
     fp = fopen(argv[1], "r");
     int i = 0;
     while((c=fgetc(fp)) != EOF){
+        if(i == size){
+            size += size;
+            buffer = realloc(buffer, size * sizeof(*buffer));
+            if(buffer == NULL){
+                return 1;
+            }
+        }
         buffer[i] = c;
         i++;
     }
+    buffer = realloc(buffer, (i+1) * sizeof(*buffer));
     buffer[i] = '\0';
     fclose(fp);
 
@@ -426,6 +439,7 @@ int main(int argc, char ** argv){
     printf("%s\n", ans->code_description);
     printf("%s\n", ans->data);
     free_http_response(ans);
+    free(buffer);
     return 0;
 }
 */
