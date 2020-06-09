@@ -395,3 +395,37 @@ void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length){
     }
     return ptr;
 }
+
+/** 
+ * To test with afl-fuzz uncomment the main function below and run:
+ *     1. Create a directory for example inputs (i.e. parser_test_case)
+ *     2. Insert at least 1 (one) example file in the created directory
+ *     3. Run in the terminal "afl-clang http_response_parser.c parser.c -o http_response -pedantic -std=c99" (or afl-gcc)
+ *     4. Run in the terminal "afl-fuzz -i parser_test_case -o afl-output -- ./http_response @@"
+ */
+
+/*
+int main(int argc, char ** argv){
+    FILE * fp;
+    char c;
+    char buffer[1000];
+    if(argc != 2){
+        return 1;
+    }
+    fp = fopen(argv[1], "r");
+    int i = 0;
+    while((c=fgetc(fp)) != EOF){
+        buffer[i] = c;
+        i++;
+    }
+    buffer[i] = '\0';
+    fclose(fp);
+
+    struct http_response * ans = http_response_parser(buffer);
+    printf("%d\n", ans->status_code);
+    printf("%s\n", ans->code_description);
+    printf("%s\n", ans->data);
+    free_http_response(ans);
+    return 0;
+}
+*/
