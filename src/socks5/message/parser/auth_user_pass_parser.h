@@ -7,11 +7,6 @@
 #include "../../../buffer.h"
 #include "../auth_user_pass_helper.h"
 
-#define AUTH_USER_PASS_DEFAULT_USER "root"
-#define AUTH_USER_PASS_DEFAULT_USER_LENGTH 4
-#define AUTH_USER_PASS_DEFAULT_PASS "root"
-#define AUTH_USER_PASS_DEFAULT_PASS_LENGTH 4
-
 /**
  * Once the SOCKS V5 server has started, and the client has selected the
  * Username/Password Authentication protocol, the Username/Password
