@@ -156,7 +156,7 @@ static int8_t auth_user_pass_cmp(void *e1, void *e2) {
 
     if (credentials1->username_length < credentials2->username_length)
         return -1;
-    if (credentials2->username_length > credentials2->username_length)
+    if (credentials1->username_length > credentials2->username_length)
         return 1;
     return strcmp(credentials1->username, credentials2->username);
 }
