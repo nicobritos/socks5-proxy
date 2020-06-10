@@ -11,6 +11,7 @@
 #define AUTH_USER_PASS_STATUS_INVALID_CREDENTIALS 1
 
 /**
+ * ---------------------- REQUEST ----------------------
  * Once the SOCKS V5 server has started, and the client has selected the
  * Username/Password Authentication protocol, the Username/Password
  * subnegotiation begins.  This begins with the client producing a
@@ -28,7 +29,23 @@
  * source operating system. The PLEN field contains the length of the
  * PASSWD field that follows. The PASSWD field contains the password
  * association with the given UNAME.
- */
+ *
+ *
+ *
+ * ---------------------- RESPONSE ----------------------
+ * The server verifies the supplied UNAME and PASSWD, and sends the
+ * following response:
+ *
+ *                      +----+--------+
+ *                      |VER | STATUS |
+ *                      +----+--------+
+ *                      | 1  |   1    |
+ *                      +----+--------+
+ *
+ * A STATUS field of X'00' indicates success. If the server returns a
+ * `failure' (STATUS value other than X'00') status, it MUST close the
+ * connection.
+*/
 
 /** estado del parser */
 enum auth_user_pass_state {
