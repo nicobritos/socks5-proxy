@@ -117,6 +117,14 @@ bool auth_user_pass_helper_verify(const struct auth_user_pass_credentials *crede
     return strcmp(credentials->password, other_credentials->password);
 }
 
+/**
+ * Elimina toda la informacion de memoria
+ */
+void auth_user_pass_helper_close() {
+    if (credentials_map == NULL) return;
+    sorted_hashmap_free(credentials_map);
+}
+
 /** ---------------- PRIVATE ----------------- */
 /**
  * Esta funcion hashea un credentials (se hashea solo el username)

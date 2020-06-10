@@ -7,6 +7,7 @@
 typedef struct hashmapCDT {
     int8_t (*cmp)(void *e1, void *e2);
     uint64_t (*hasher)(void *e);
+    void (*freer)(void *e);
 
     sorted_hashmap_node *overflow_nodes;
     uint64_t overflow_nodes_length;
@@ -37,9 +38,10 @@ static sorted_hashmap_node sorted_hashmap_find_from_node_(sorted_hashmap_t hashm
 static sorted_hashmap_node sorted_hashmap_find_previous_inserting_node_(sorted_hashmap_t hashmap, sorted_hashmap_node node, void *element);
 /**
  * Elimina todos los nodos siguientes al pasado por parametro
+ * @param hashmap
  * @param node
  */
-static void sorted_hashmap_free_starting_node_(sorted_hashmap_node node);
+static void sorted_hashmap_free_starting_node_(sorted_hashmap_t hashmap, sorted_hashmap_node node);
 
 
 /** ----------------- DEFINITIONS ----------------- */
@@ -208,7 +210,7 @@ void sorted_hashmap_remove(sorted_hashmap_t hashmap, sorted_hashmap_node node) {
  * @param hashmap
  */
 void sorted_hashmap_free(sorted_hashmap_t hashmap) {
-    if (hashmap == NULL) return;
+    if (hashmap == NULL || hashmap->freer == NULL) return;
     uint64_t index = 0;
     while (index < hashmap->overflow_nodes_length) {
         sorted_hashmap_free_starting_node_(hashmap->overflow_nodes[index]);
@@ -220,11 +222,12 @@ void sorted_hashmap_free(sorted_hashmap_t hashmap) {
  * Elimina todos los nodos siguientes al pasado por parametro
  * @param node
  */
-static void sorted_hashmap_free_starting_node_(sorted_hashmap_node node) {
+static void sorted_hashmap_free_starting_node_(sorted_hashmap_t hashmap, sorted_hashmap_node node) {
     if (node == NULL) return;
     sorted_hashmap_node next_node;
     do {
         next_node = node->next;
+        hashmap->freer(node->element);
         free(node);
     } while (next_node != NULL);
 }
@@ -259,5 +262,17 @@ bool sorted_hashmap_set_cmp(sorted_hashmap_t hashmap, int8_t (cmp)(void *e1, voi
 bool sorted_hashmap_set_hasher(sorted_hashmap_t hashmap, uint64_t (hasher)(void *e)) {
     if (hashmap == NULL || hasher == NULL || hashmap->hasher != NULL) return false;
     hashmap->hasher = hasher;
+    return true;
+}
+
+/**
+ * Setea la funcion de free de memoria
+ * @param hashmap
+ * @param freer la funcion de hasheo
+ * @return false si el hashmap ya tenia una funcion seteada.
+ */
+bool sorted_hashmap_set_freer(sorted_hashmap_t hashmap, void (freer)(void *e)) {
+    if (hashmap == NULL || freer == NULL || hashmap->freer != NULL) return false;
+    hashmap->freer = freer;
     return true;
 }
