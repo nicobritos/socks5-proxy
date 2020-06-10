@@ -159,3 +159,21 @@ void auth_user_pass_parser_close(struct auth_user_pass_parser *p) {
         p->_password_length = p->_password_index = 0;
     }
 }
+
+/**
+ * serializa en buffer la respuesta del parser.
+ *
+ * @return la cantidad de bytes ocupados del buffer o -1 si no había
+ * espacio suficiente.
+ */
+int auth_user_pass_parser_close_write_response(buffer *buffer, const uint8_t status) {
+    size_t n;
+    uint8_t *buff = buffer_write_ptr(buffer, &n);
+    if (n < 2) {
+        return -1;
+    }
+    buff[0] = VALID_VERSION;
+    buff[1] = status;
+    buffer_write_adv(buffer, 2);
+    return 2;
+}

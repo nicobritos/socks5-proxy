@@ -7,6 +7,9 @@
 #include "../../../buffer.h"
 #include "../auth_user_pass_helper.h"
 
+#define AUTH_USER_PASS_STATUS_CREDENTIALS_OK 0
+#define AUTH_USER_PASS_STATUS_INVALID_CREDENTIALS 1
+
 /**
  * Once the SOCKS V5 server has started, and the client has selected the
  * Username/Password Authentication protocol, the Username/Password
@@ -96,5 +99,13 @@ const char *auth_user_pass_parser_error(const struct auth_user_pass_parser *p);
 
 /** libera recursos internos del parser */
 void auth_user_pass_parser_close(struct auth_user_pass_parser *p);
+
+/**
+ * serializa en buffer la respuesta del parser.
+ *
+ * @return la cantidad de bytes ocupados del buffer o -1 si no había
+ * espacio suficiente.
+ */
+int auth_user_pass_parser_close_write_response(buffer *buffer, const uint8_t status);
 
 #endif //PC_2020A_6_TPE_SOCKSV5_AUTH_USER_PASS_PARSER_H
