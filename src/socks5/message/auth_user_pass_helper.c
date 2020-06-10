@@ -123,6 +123,7 @@ bool auth_user_pass_helper_verify(const struct auth_user_pass_credentials *crede
 void auth_user_pass_helper_close() {
     if (credentials_map == NULL) return;
     sorted_hashmap_free(credentials_map);
+    credentials_map = NULL;
 }
 
 /** ---------------- PRIVATE ----------------- */
