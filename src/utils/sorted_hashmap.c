@@ -91,7 +91,7 @@ static sorted_hashmap_node sorted_hashmap_find_from_node_(sorted_hashmap_t hashm
     do {
         cmp = hashmap->cmp(node->element, element);
         if (cmp == 0) return node;
-        if (cmp == 1) return NULL;
+        if (cmp > 1) return NULL;
         node = node->next;
     } while (node != NULL);
 
@@ -111,7 +111,7 @@ static sorted_hashmap_node sorted_hashmap_find_previous_inserting_node_(sorted_h
     do {
         cmp = hashmap->cmp(node->element, element);
         if (cmp == 0) return node;
-        if (cmp == 1) return previous_node;
+        if (cmp > 1) return previous_node;
         previous_node = node;
         node = node->next;
     } while (node != NULL);
@@ -186,7 +186,6 @@ void *sorted_hashmap_get_element(sorted_hashmap_node node) {
  */
 void sorted_hashmap_remove(sorted_hashmap_t hashmap, sorted_hashmap_node node) {
     if (hashmap == NULL || node == NULL) return;
-    if (hashmap->hasher == NULL || hashmap->cmp == NULL) return;
     if (hashmap->total_nodes == 0) return;
 
     if (node->previous != NULL) {
