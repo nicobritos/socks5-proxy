@@ -6,6 +6,8 @@
 
 #include "hello_parser.h"
 
+#define VALID_VERSION 0x05
+
 void hello_parser_init(struct hello_parser *p) {
     p->state = hello_version;
     p->remaining = 0;
@@ -14,7 +16,7 @@ void hello_parser_init(struct hello_parser *p) {
 enum hello_state hello_parser_feed(struct hello_parser *p, const uint8_t b) {
     switch (p->state) {
         case hello_version:
-            if (b == 0x05) {
+            if (b == VALID_VERSION) {
                 p->state = hello_nmethods;
             } else {
                 p->state = hello_error_unsupported_version;
@@ -82,13 +84,13 @@ enum hello_state hello_consume(buffer *b, struct hello_parser *p, bool *errored)
     return st;
 }
 
-int hello_marshall(buffer *b, const uint8_t method) {
+int hello_write_response(buffer *b, const uint8_t method) {
     size_t n;
     uint8_t *buff = buffer_write_ptr(b, &n);
     if (n < 2) {
         return -1;
     }
-    buff[0] = 0x05;
+    buff[0] = VALID_VERSION;
     buff[1] = method;
     buffer_write_adv(b, 2);
     return 2;

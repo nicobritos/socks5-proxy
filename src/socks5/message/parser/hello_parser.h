@@ -88,6 +88,6 @@ void hello_parser_close(struct hello_parser *p);
  * Retorna la cantidad de bytes ocupados del buffer o -1 si no había
  * espacio suficiente.
  */
-int hello_marshall(buffer *b, const uint8_t method);
+int hello_write_response(buffer *b, const uint8_t method);
 
 #endif
