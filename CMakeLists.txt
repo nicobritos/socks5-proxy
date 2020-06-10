@@ -8,6 +8,11 @@ set(SOURCE_FILES
         src/netutils.c
         src/selector.c
         src/stm.c
+        src/socks5/socks5nio.c
+        src/socks5/message/parser/hello_parser.c
+        src/socks5/message/parser/auth_user_pass_parser.c
+        src/socks5/message/auth_user_pass_helper.c
+        src/utils/sorted_hashmap.c
 )
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
