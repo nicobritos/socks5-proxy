@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
@@ -31,7 +32,7 @@ int main(int argc, char* argv[]){
     struct in_addr {
         unsigned long s_addr;  // load with inet_aton()
     }; */
-    struct sockaddr_in servAddr; // Structures for handling internet addresses
+    struct sockaddr_in servaddr; // Structures for handling internet addresses
 
     /* struct sctp_status {
         sctp_assoc_t sstat_assoc_id;
@@ -44,7 +45,7 @@ int main(int argc, char* argv[]){
         u_int32_t sstat_fragmentation_point;
         struct sctp_paddrinfo sstat_primary;
     }; */
-    struct sctp_status status; // Current state of an SCTP association.
+    // struct sctp_status status; // Current state of an SCTP association.
 
     char buffer[MAX_BUFFER + 1];
     int dataLength = 0;
@@ -90,7 +91,7 @@ int main(int argc, char* argv[]){
     /* bzero(void *s, size_t n);
      * Function writes n zeroed bytes to the string s. If n is zero, bzero() does nothing.
     */
-    bzero ((void *) &servaddr, sizeof (servaddr));
+    bzero((void *) &servaddr, sizeof (servaddr));
 
     servaddr.sin_family = PF_INET; //estoy usando IPV4
 

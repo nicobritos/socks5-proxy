@@ -7,12 +7,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <time.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
-//#include <netinet/sctp.h>
+#include <netinet/sctp.h>
 
 #include "include/SCTPServer.h"
 
@@ -81,7 +82,7 @@ int main(){
         exit(1);
     }
 
-    bzero ((void *) &servaddr, sizeof (servaddr));
+    bzero((void *) &servaddr, sizeof (servaddr));
     servaddr.sin_family = AF_INET;
     /*
      * uint32_t htonl(uint32_t hostlong)
@@ -153,7 +154,7 @@ int main(){
          * Extracts the first connection request on the queue of pending connections.
          * Creates a new socket with the same properties of socket, and allocates a new file descriptor for the socket
          */
-        connSock = accept (listenSock, (struct sockaddr *) NULL, (int *) NULL);
+        connSock = accept(listenSock, (struct sockaddr *) NULL, (socklen_t *) NULL);
         if (connSock == -1)
         {
             printf("accept() failed\n");
