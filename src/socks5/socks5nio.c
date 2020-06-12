@@ -207,10 +207,10 @@ struct socks5 {
     struct sockaddr_storage client_addr;
     int client_fd;
 
-    /** res de la direccion del origin server */
+    /** res de la direccion del server */
     struct addrinfo *origin_resolution;
-    struct sockaddr origin_addr;
-    socklen_t origin_addr_len;
+    struct sockaddr server_addr;
+    socklen_t server_addr_len;
     int origin_domain;
     int server_fd;
 
@@ -374,14 +374,9 @@ void socksv5_passive_accept(struct selector_key *key) {
     socklen_t client_addr_len = sizeof(client_addr);
     struct socks5 *state = NULL;
 
-    const int client = accept(key->fd, (struct sockaddr *) &client_addr,
-                              &client_addr_len);
-    if (client == -1) {
-        goto fail;
-    }
-    if (selector_fd_set_nio(client) == -1) {
-        goto fail;
-    }
+    const int client = accept(key->fd, (struct sockaddr *) &client_addr, &client_addr_len);
+    if (client == -1 || selector_fd_set_nio(client) == -1) goto fail;
+
     state = socks5_new(client);
     if (state == NULL) {
         //TODO
@@ -392,15 +387,11 @@ void socksv5_passive_accept(struct selector_key *key) {
     }
     memcpy(&state->client_addr, &client_addr, client_addr_len);
 
-    if (SELECTOR_SUCCESS != selector_register(key->s, client, &socks5_handler,
-                                              OP_READ, state)) {
-        goto fail;
-    }
+    if (SELECTOR_SUCCESS != selector_register(key->s, client, &socks5_handler, OP_READ, state)) goto fail;
     return;
+
     fail:
-    if (client != -1) {
-        close(client);
-    }
+    if (client != -1) close(client);
     socks5_destroy(state);
 }
 
@@ -761,16 +752,16 @@ static unsigned request_process(struct selector_key *key, struct request_st *d) 
 
                     ATTACHMENT(key)->origin_domain = AF_INET;
                     in->sin_port = htons(d->request.port);
-                    ATTACHMENT(key)->origin_addr_len = sizeof(d->request.dest_addr);
-                    memcpy(&ATTACHMENT(key)->origin_addr, &d->request.dest_addr, sizeof(d->request.dest_addr));
+                    ATTACHMENT(key)->server_addr_len = sizeof(d->request.dest_addr);
+                    memcpy(&ATTACHMENT(key)->server_addr, &d->request.dest_addr, sizeof(d->request.dest_addr));
                     return request_connect(key, d);
                 case REQUEST_ATYP_IPV6:
                     in6 = (struct sockaddr_in6 *) &d->request.dest_addr;
 
                     ATTACHMENT(key)->origin_domain = AF_INET6;
                     in6->sin6_port = htons(d->request.port);
-                    ATTACHMENT(key)->origin_addr_len = sizeof(d->request.dest_addr);
-                    memcpy(&ATTACHMENT(key)->origin_addr, &d->request.dest_addr, sizeof(d->request.dest_addr));
+                    ATTACHMENT(key)->server_addr_len = sizeof(d->request.dest_addr);
+                    memcpy(&ATTACHMENT(key)->server_addr, &d->request.dest_addr, sizeof(d->request.dest_addr));
                     return request_connect(key, d);
                 case REQUEST_ATYP_DOMAIN_NAME:
                     key_copy = malloc(sizeof(*key));
@@ -813,7 +804,7 @@ static unsigned request_connect(struct selector_key *key, struct request_st *d) 
         error = true;
         goto finally;
     }
-    if (connect(*fd, (const struct sockaddr*) &ATTACHMENT(key)->origin_addr, ATTACHMENT(key)->origin_addr_len) == -1) {
+    if (connect(*fd, (const struct sockaddr*) &ATTACHMENT(key)->server_addr, ATTACHMENT(key)->server_addr_len) == -1) {
         if (errno == EINPROGRESS) {
             /** Nos llega este error porque estamos en async */
             selector_status st = selector_set_interest_key(key, OP_NOOP);
@@ -917,8 +908,8 @@ static unsigned request_resolve_done(struct selector_key *key) {
         d->status = socks_status_general_SOCKS_server_failure;
     } else {
         s->origin_domain = s->origin_resolution->ai_family;
-        s->origin_addr_len = s->origin_resolution->ai_addrlen;
-        memcpy(&s->origin_addr, s->origin_resolution->ai_addr, s->origin_resolution->ai_addrlen);
+        s->server_addr_len = s->origin_resolution->ai_addrlen;
+        memcpy(&s->server_addr, s->origin_resolution->ai_addr, s->origin_resolution->ai_addrlen);
         freeaddrinfo(s->origin_resolution);
         s->origin_resolution = NULL;
     }
@@ -953,7 +944,7 @@ static unsigned request_connecting_write(struct selector_key *key) {
         }
     }
 
-    if (request_parser_write_response(d->write_buffer, &ATTACHMENT(key)->client.request.parser, *d->status) == -1) {
+    if (request_parser_write_response(d->write_buffer, &ATTACHMENT(key)->client_addr, *d->status) == -1) {
         *d->status = socks_status_general_SOCKS_server_failure;
         abort(); // El fubber tiene que ser mas grande en la variable
     }

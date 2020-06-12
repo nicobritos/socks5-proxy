@@ -226,42 +226,53 @@ void request_parser_close(struct request_parser *p) {
  * @return la cantidad de bytes ocupados del buffer o -1 si no había
  * espacio suficiente.
  */
-int request_parser_write_response(buffer *buffer, const struct request_parser *p, const uint8_t reply) {
+int request_parser_write_response(
+        buffer *buffer,
+        const struct sockaddr_storage *client_addr,
+        const uint8_t reply)
+{
     size_t n;
     uint8_t *buff = buffer_write_ptr(buffer, &n);
     struct sockaddr_in *in;
     struct sockaddr_in6 *in6;
 
-    /** Si estamos con un domain name, necesitamos un byte mas para especificar el largo */
-    uint16_t length = MIN_REPLY_SIZE + p->_address_length + (p->_atyp == REQUEST_ATYP_DOMAIN_NAME ? 1 : 0);
+    uint16_t length = MIN_REPLY_SIZE + (client_addr->ss_family == AF_INET ? IPV4_LENGTH : IPV6_LENGTH);
     if (n < length) return -1;
 
-    uint16_t i = 0, address_i = 0;
+    uint16_t i = 0;
+    int16_t address_i;
+    uint32_t ip;
+
     buff[i++] = VALID_VERSION;
     buff[i++] = reply;
     buff[i++] = VALID_RESERVED;
-    buff[i++] = p->_atyp;
-    if (p->_atyp == REQUEST_ATYP_DOMAIN_NAME) {
-        buff[i++] = p->_address_length;
-        while (address_i < p->_address_length) {
-            buff[i++] = p->request->domain_name[address_i++];
-        }
-    } else if (p->_atyp == REQUEST_ATYP_IPV4) {
-        in = (struct sockaddr_in *) &p->request->dest_addr;
-        uint32_t ip = ntohl(in->sin_addr.s_addr);
-        while (address_i < p->_address_length) {
-            buff[i++] = (ip >> (8u * (3 - address_i))) & 0xFFu;
-            address_i++;
-        }
-    } else if (p->_atyp == REQUEST_ATYP_IPV6) {
-        in6 = (struct sockaddr_in6 *) &p->request->dest_addr;
 
-        while (address_i < p->_address_length) {
-            buff[i++] = in6->sin6_addr.s6_addr[address_i++];
+    if (client_addr->ss_family == AF_INET) {
+        in = (struct sockaddr_in *) client_addr;
+        buff[i++] = REQUEST_ATYP_IPV4;
+
+        ip = ntohl(in->sin_addr.s_addr);
+        address_i = IPV4_LENGTH - 1;
+        while (address_i >= 0) {
+            buff[i++] = (ip >> (8u * address_i)) & 0xFFu;
+            address_i--;
         }
+
+        buff[i++] = (in->sin_port >> 8u);
+        buff[i] = (in->sin_port & 0xFFu);
+    } else {
+        in6 = (struct sockaddr_in6 *) client_addr;
+        buff[i++] = REQUEST_ATYP_IPV6;
+
+        address_i = IPV6_LENGTH - 1;
+        while (address_i >= 0) {
+            buff[i++] = in6->sin6_addr.s6_addr[address_i];
+            address_i--;
+        }
+
+        buff[i++] = (in6->sin6_port >> 8u);
+        buff[i] = (in6->sin6_port & 0xFFu);
     }
-    buff[i++] = (p->request->port >> 8u);
-    buff[i] = (p->request->port & 0xFFu);
 
     buffer_write_adv(buffer, length);
     return length;
