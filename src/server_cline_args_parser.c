@@ -54,7 +54,7 @@ static uint16_t parse_port(const char *port){
     return (uint16_t) p;
 }
 
-static vois print_options(){
+static void print_options(){
     printf("Options:\n");
     printf("\t-%c\tShow valid options\n",'h');
     printf("\t-%c\tSet address\n",'a');
