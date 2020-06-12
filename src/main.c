@@ -95,6 +95,8 @@ main(const int argc, const char **argv) {
     // esto ayuda mucho en herramientas como valgrind.
     signal(SIGTERM, sigterm_handler);
     signal(SIGINT, sigterm_handler);
+    /** Algunos SOs ignoran el MSG_NOSIGNAL flag */
+    signal(SIGPIPE, SIG_IGN);
 
     if (selector_fd_set_nio(server) == -1) {
         err_msg = "getting server socket flags";
