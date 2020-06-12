@@ -226,7 +226,7 @@ void request_parser_close(struct request_parser *p) {
  * @return la cantidad de bytes ocupados del buffer o -1 si no había
  * espacio suficiente.
  */
-int request_parser_close_write_response(buffer *buffer, const struct request_parser *p, const uint8_t reply) {
+int request_parser_write_response(buffer *buffer, const struct request_parser *p, const uint8_t reply) {
     size_t n;
     uint8_t *buff = buffer_write_ptr(buffer, &n);
     struct sockaddr_in *in;
@@ -248,9 +248,8 @@ int request_parser_close_write_response(buffer *buffer, const struct request_par
         }
     } else if (p->_atyp == REQUEST_ATYP_IPV4) {
         in = (struct sockaddr_in *) &p->request->dest_addr;
-        uint32_t ip = ntohs(in->sin_addr.s_addr);
+        uint32_t ip = ntohl(in->sin_addr.s_addr);
         while (address_i < p->_address_length) {
-            printf("%d", ip);
             buff[i++] = (ip >> (8u * (3 - address_i))) & 0xFFu;
             address_i++;
         }

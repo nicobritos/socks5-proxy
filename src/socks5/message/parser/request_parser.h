@@ -188,6 +188,6 @@ void request_parser_close(struct request_parser *p);
  * @return la cantidad de bytes ocupados del buffer o -1 si no había
  * espacio suficiente.
  */
-int request_parser_close_write_response(buffer *buffer, const struct request_parser *p, const uint8_t reply);
+int request_parser_write_response(buffer *buffer, const struct request_parser *p, const uint8_t reply);
 
 #endif //PC_2020A_6_TPE_SOCKSV5_REQUEST_PARSER_H
