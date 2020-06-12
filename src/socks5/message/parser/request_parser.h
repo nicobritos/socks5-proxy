@@ -8,7 +8,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "../../../buffer.h"
+#include "../../../utils/buffer.h"
+#include "../request.h"
 
 /**
  * ---------------------- REQUEST ----------------------
@@ -129,24 +130,20 @@ enum request_state {
     request_error_invalid_cmd,
     request_error_invalid_rsv,
     request_error_no_memory,
+    request_error_missing_request,
     request_error_invalid_atyp,
     request_error_invalid_domain_address,
 };
 
 struct request_parser {
-    uint8_t cmd;
+    /** Este campo es responsabilidad del usuario. Debe existir */
+    struct request *request;
 
     /** Private */
     enum request_state _state;
 
-    union {
-        uint8_t *ipv4;
-        uint8_t *ipv6;
-        char *domain;
-    } _address;
-
+    uint8_t _cmd;
     uint8_t _atyp;
-    uint16_t _port;
     uint8_t _port_index;
 
     uint8_t _address_index;
