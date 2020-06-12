@@ -4,13 +4,15 @@ project(PC-2020A-6-TPE.SOCKSV5)
 set(CMAKE_C STANDARD 11)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pedantic -c")
 set(SOURCE_FILES
-        src/buffer.c
-        src/netutils.c
-        src/selector.c
-        src/stm.c
+        src/utils/buffer.c
+        src/utils/netutils.c
+        src/utils/selector.c
+        src/utils/stm.c
         src/socks5/socks5nio.c
+        src/socks5/message/request.c
         src/socks5/message/parser/hello_parser.c
         src/socks5/message/parser/auth_user_pass_parser.c
+        src/socks5/message/parser/request_parser.c
         src/socks5/message/auth_user_pass_helper.c
         src/utils/sorted_hashmap.c
 )

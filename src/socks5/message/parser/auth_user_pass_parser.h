@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "../../../buffer.h"
+#include "../../../utils/buffer.h"
 #include "../auth_user_pass_helper.h"
 
 #define AUTH_USER_PASS_STATUS_CREDENTIALS_OK 0

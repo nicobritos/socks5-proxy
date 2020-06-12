@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "../../../buffer.h"
+#include "../../../utils/buffer.h"
 
 #define SOCKS_HELLO_METHOD_NO_AUTHENTICATION_REQUIRED 0x00
 #define SOCKS_HELLO_METHOD_USERNAME_PASSWORD 0x02

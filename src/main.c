@@ -23,9 +23,8 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
-//#include "socks5.h"
-#include "selector.h"
-//#include "socks5nio.h"
+#include "utils/selector.h"
+#include "socks5/socks5nio.h"
 #include <limits.h>
 
 static bool done = false;
@@ -34,10 +33,6 @@ static void
 sigterm_handler(const int signal) {
     printf("signal %d, cleaning up and exiting\n", signal);
     done = true;
-}
-
-void socksv5_passive_accept(struct selector_key *key) {
-    printf("HOLA");
 }
 
 int
@@ -162,7 +157,7 @@ main(const int argc, const char **argv) {
     }
     selector_close();
 
-//    socksv5_pool_destroy();
+    socksv5_pool_destroy();
 
     if (server >= 0) {
         close(server);

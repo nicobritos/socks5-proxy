@@ -213,7 +213,7 @@ void sorted_hashmap_free(sorted_hashmap_t hashmap) {
     if (hashmap == NULL || hashmap->freer == NULL) return;
     uint64_t index = 0;
     while (index < hashmap->overflow_nodes_length) {
-        sorted_hashmap_free_starting_node_(hashmap->overflow_nodes[index]);
+        sorted_hashmap_free_starting_node_(hashmap, hashmap->overflow_nodes[index]);
         index++;
     }
 }
