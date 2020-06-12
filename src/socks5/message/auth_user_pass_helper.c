@@ -138,7 +138,7 @@ static uint64_t auth_user_pass_hasher(void *e) {
     /** See https://stackoverflow.com/a/7666577 */
     uint64_t hash = INITIAL_HASH_VALUE;
     uint8_t c;
-    char *username = credentials->username;
+    const char *username = credentials->username;
     while ((c = *username++)) hash = ((hash << SHIFT_HASH_VALUE) + hash) + c; /* hash * 33 + c */
 
     return hash;

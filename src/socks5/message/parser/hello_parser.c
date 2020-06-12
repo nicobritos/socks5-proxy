@@ -52,10 +52,11 @@ enum hello_state hello_parser_feed(struct hello_parser *p, const uint8_t b) {
 }
 
 bool hello_is_done(const enum hello_state state, bool *errored) {
+    if (state == hello_error_unsupported_version && errored != NULL)
+        *errored = true;
+
     switch (state) {
         case hello_error_unsupported_version:
-            if (errored != NULL) *errored = true;
-            /* no break */
         case hello_done:
             return true;
         default:
