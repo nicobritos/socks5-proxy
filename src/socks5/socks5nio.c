@@ -982,7 +982,7 @@ static unsigned copy_read(struct selector_key *key) {
     unsigned ret = COPY;
 
     uint8_t *ptr = buffer_write_ptr(d->read_buffer, &size);
-    n = send(key->fd, ptr, size, 0);
+    n = recv(key->fd, ptr, size, 0);
     if (n <= 0) {
         shutdown(*d->fd, SHUT_RD);
         d->duplex &= ~OP_READ;
