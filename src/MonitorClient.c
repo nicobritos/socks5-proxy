@@ -19,6 +19,11 @@
 
 #define MAX_BUFFER 1024
 #define MY_PORT_NUM 62324
+#define HISTORICAL_CONNECTION 1
+#define CONCURRENT_CONNECTIOS 2
+#define BYTES_TRANSFERRED 3
+
+static int connSock;
 
 int main(int argc, char* argv[]){
 
@@ -35,12 +40,13 @@ int main(int argc, char* argv[]){
     dataLength = strlen(buffer);
 
 
-    int connSock = socket (PF_INET, SOCK_STREAM, IPPROTO_SCTP); //estoy usando IPV4
+    connSock = socket (PF_INET, SOCK_STREAM, IPPROTO_SCTP); //estoy usando IPV4
     if(connSock == -1){
         //No se pudo crear el socket
         printf("Socket creation failed\n");
         perror("socket()");
         exit(1);
+    }
 
     bzero((void *) &servaddr, sizeof (servaddr));
 
@@ -76,3 +82,42 @@ int main(int argc, char* argv[]){
 
 }
 
+static void get_metrics(){
+    printf("Show number of: \n")
+    printf("[1] Historical connections\n");
+    printf("[2] Concurrent connections\n");
+    print("[3] Bytes transferred\n");
+
+    if(fgets(buffer, sizeof(buffer), stdin) == NULL){
+         fprintf(stderr,"Please, choose an option.\n");
+         return;
+    } 
+
+    char *ptr;
+    long ret;
+
+    ret = strtoul(buffer,&ptr,10);
+
+    switch(ret){
+        case 1:
+            get_metric(HISTORICAL_CONNECTION);
+            break;
+        case 2:
+            get_metric(CONCURRENT_CONNECTIOS);
+            break;
+        case 3:
+            get_metric(BYTES_TRANSFERRED);
+            break;
+        default:
+        printf("Error: Invalid option: %lu \n Please try again with a valid option.",ret);
+        break;
+    }
+}
+
+static void get_metric(int metric){
+    //definir el formato del datagrama a enviar y largo
+    uint8_t datagram[1]
+    int ret;
+
+
+}
