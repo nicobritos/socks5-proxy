@@ -164,7 +164,7 @@ static const struct parser_state_transition USERNAME_END [] =  {
     {.when = '+',        .dest = ST_USER_RESPONSE_OK_PLUS,  .act1 = next_state,},
     {.when = '-',        .dest = ST_USER_RESPONSE_ERR,      .act1 = erase_user,},
     {.when = '\0',       .dest = ST_USERNAME_END,           .act1 = next_state,},
-    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = erase_user,},
     {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = erase_user,},
 };
 
@@ -177,22 +177,22 @@ static const struct parser_state_transition USER_RESPONSE_ERR [] =  {
 static const struct parser_state_transition USER_RESPONSE_OK_PLUS [] =  {
     {.when = 'O',        .dest = ST_USER_RESPONSE_OK_O,     .act1 = next_state,},
     {.when = '\0',       .dest = ST_USER_RESPONSE_OK_PLUS,  .act1 = next_state,},
-    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
-    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = erase_user,},
+    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = erase_user,},
 };
 
 static const struct parser_state_transition USER_RESPONSE_OK_O [] =  {
     {.when = 'K',        .dest = ST_USER_RESPONSE_OK_K,     .act1 = next_state,},
     {.when = '\0',       .dest = ST_USER_RESPONSE_OK_O,     .act1 = next_state,},
-    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
-    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = erase_user,},
+    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = erase_user,},
 };
 
 static const struct parser_state_transition USER_RESPONSE_OK_K [] =  {
     {.when = ' ',        .dest = ST_USER_RESPONSE_OK_SPACE, .act1 = next_state,},
     {.when = '\0',       .dest = ST_USER_RESPONSE_OK_K,     .act1 = next_state,},
-    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
-    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = erase_user,},
+    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = erase_user,},
 };
 
 static const struct parser_state_transition USER_RESPONSE_OK_SPACE [] =  {
@@ -203,41 +203,41 @@ static const struct parser_state_transition USER_RESPONSE_OK_SPACE [] =  {
 static const struct parser_state_transition USER_RESPONSE_OK_END [] =  {
     {.when = 'P',        .dest = ST_PASS_P,                 .act1 = next_state,},
     {.when = '\0',       .dest = ST_USER_RESPONSE_OK_END,   .act1 = next_state,},
-    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
-    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = erase_user,},
+    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = erase_user,},
 };
 
 static const struct parser_state_transition PASS_P [] =  {
     {.when = 'A',        .dest = ST_PASS_A,                 .act1 = next_state,},
     {.when = '\0',       .dest = ST_PASS_P,                 .act1 = next_state,},
-    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
-    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = erase_user,},
+    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = erase_user,},
 };
 
 static const struct parser_state_transition PASS_A [] =  {
     {.when = 'S',        .dest = ST_PASS_S,                 .act1 = next_state,},
     {.when = '\0',       .dest = ST_PASS_A,                 .act1 = next_state,},
-    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
-    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = erase_user,},
+    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = erase_user,},
 };
 
 static const struct parser_state_transition PASS_S [] =  {
     {.when = 'S',        .dest = ST_PASS_S_2,               .act1 = next_state,},
     {.when = '\0',       .dest = ST_PASS_S,                 .act1 = next_state,},
-    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
-    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = erase_user,},
+    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = erase_user,},
 };
 
 static const struct parser_state_transition PASS_S_2 [] =  {
     {.when = ' ',        .dest = ST_PASS_SPACE,             .act1 = next_state,},
     {.when = '\0',       .dest = ST_PASS_S_2,               .act1 = next_state,},
-    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
-    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = erase_user,},
+    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = erase_user,},
 };
 
 static const struct parser_state_transition PASS_SPACE [] =  {
     {.when = '\0',       .dest = ST_PASS_SPACE,             .act1 = next_state,},
-    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = erase_user,},
     {.when = ANY,        .dest = ST_PASSWORD,               .act1 = copy_pass,},
 };
 
@@ -251,28 +251,28 @@ static const struct parser_state_transition PASSWORD_END [] =  {
     {.when = '+',        .dest = ST_PASS_RESPONSE_OK_PLUS,  .act1 = next_state,},
     {.when = '-',        .dest = ST_PASS_RESPONSE_ERR,      .act1 = erase_pass,},
     {.when = '\0',       .dest = ST_PASSWORD_END,           .act1 = next_state,},
-    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
-    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = erase_pass,},
+    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = erase_pass,},
 };
 
 static const struct parser_state_transition PASS_RESPONSE_ERR [] =  {
     {.when = '\0',       .dest = ST_PASS_RESPONSE_ERR,      .act1 = next_state,},
-    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
-    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = erase_pass,},
+    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = erase_pass,},
 };
 
 static const struct parser_state_transition PASS_RESPONSE_OK_PLUS [] =  {
     {.when = 'O',        .dest = ST_PASS_RESPONSE_OK_O,     .act1 = next_state,},
     {.when = '\0',       .dest = ST_PASS_RESPONSE_OK_PLUS,  .act1 = next_state,},
-    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
-    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = erase_pass,},
+    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = erase_pass,},
 };
 
 static const struct parser_state_transition PASS_RESPONSE_OK_O [] =  {
-    {.when = 'K',        .dest = ST_FINISHED,               .act1 = next_state,},
+    {.when = 'K',        .dest = ST_FINISHED,               .act1 = finished,},
     {.when = '\0',       .dest = ST_PASS_RESPONSE_OK_O,     .act1 = next_state,},
-    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
-    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = erase_pass,},
+    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = erase_pass,},
 };
 
 static const struct parser_state_transition FINISHED [] =  {
@@ -399,6 +399,12 @@ struct pop3_credentials * pop3_sniffer_consume(struct parser * parser, struct po
                     pop3_credentials->password = NULL;
                 }
                 pop3_credentials->password_length = 0;
+
+                if(pop3_credentials->user != NULL){
+                    free(pop3_credentials->user);
+                    pop3_credentials->user = NULL;
+                }
+                pop3_credentials->user_length = 0;
                 break;
             case FINISHED_T:
                 pop3_credentials->finished = 1;
