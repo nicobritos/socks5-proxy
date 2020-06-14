@@ -131,6 +131,7 @@ enum socks_v5state {
      *   - OP_READ si hay espacio
      *   - OP_WRITE si hay para leer en el buffer
      * Transiciones:
+     *   - COPY
      *   - DONE
      */
     COPY,
@@ -164,7 +165,7 @@ struct request_st {
     buffer *write_buffer;
 
     /** aqui guardamos la info de la request (address, port, cmd) */
-    struct request request;
+    const struct request request;
     /** parser */
     struct request_parser parser;
 
@@ -209,7 +210,7 @@ struct socks5 {
 
     /** res de la direccion del server */
     struct addrinfo *origin_resolution;
-    struct sockaddr server_addr;
+    struct sockaddr_storage server_addr;
     socklen_t server_addr_len;
     int origin_domain;
     int server_fd;
@@ -267,6 +268,7 @@ static void socksv5_write(struct selector_key *key);
 static void socksv5_block(struct selector_key *key);
 static void socksv5_close(struct selector_key *key);
 static void socksv5_done(struct selector_key* key);
+static void close_fd_(int fd, struct selector_key* key);
 static const struct fd_handler socks5_handler = {
         .handle_read   = socksv5_read,
         .handle_write  = socksv5_write,
@@ -498,17 +500,17 @@ static void socksv5_close(struct selector_key *key) {
 }
 
 static void socksv5_done(struct selector_key* key) {
-    const int fds[] = {
-            ATTACHMENT(key)->client_fd,
-            ATTACHMENT(key)->server_fd,
-    };
-    for (unsigned i = 0; i < N(fds); i++) {
-        if (fds[i] != -1) {
-            if (SELECTOR_SUCCESS != selector_unregister_fd(key->s, fds[i])) {
-                abort();
-            }
-            close(fds[i]);
+    close_fd_(ATTACHMENT(key)->client_fd, key);
+    close_fd_(ATTACHMENT(key)->server_fd, key);
+    ATTACHMENT(key)->client_fd = ATTACHMENT(key)->server_fd = -1;
+}
+
+static void close_fd_(int fd, struct selector_key* key) {
+    if (fd != -1) {
+        if (SELECTOR_SUCCESS != selector_unregister_fd(key->s, fd)) {
+            abort();
         }
+        close(fd);
     }
 }
 
@@ -702,7 +704,7 @@ static void request_init(const unsigned state, struct selector_key *key) {
 
     d->read_buffer = &ATTACHMENT(key)->read_buffer;
     d->write_buffer = &ATTACHMENT(key)->write_buffer;
-    d->parser.request = &d->request;
+    d->parser.request = (struct request *) &d->request;
     d->status = socks_status_general_SOCKS_server_failure;
 
     d->client_fd = &ATTACHMENT(key)->client_fd;
@@ -790,6 +792,7 @@ static unsigned request_process(struct selector_key *key, struct request_st *d) 
         case REQUEST_CMD_UDP_ASSOCIATE:
         default:
             d->status = socks_status_command_not_supported;
+            selector_set_interest_key(key, OP_WRITE);
             return REQUEST_WRITE;
     }
 }
@@ -944,13 +947,13 @@ static unsigned request_connecting_write(struct selector_key *key) {
         }
     }
 
-    if (request_parser_write_response(d->write_buffer, &ATTACHMENT(key)->client_addr, *d->status) == -1) {
+    if (request_parser_write_response(d->write_buffer, &ATTACHMENT(key)->server_addr, *d->status) == -1) {
         *d->status = socks_status_general_SOCKS_server_failure;
-        abort(); // El fubber tiene que ser mas grande en la variable
+        abort();
     }
     selector_status s = 0;
     s |= selector_set_interest(key->s, *d->client_fd, OP_WRITE);
-    s |= selector_set_interest_key(key, OP_NOOP);
+    s |= selector_set_interest(key->s, *d->server_fd, OP_NOOP);
     return s == SELECTOR_SUCCESS ? REQUEST_WRITE : ERROR;
 }
 

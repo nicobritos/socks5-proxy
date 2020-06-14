@@ -1,7 +1,3 @@
-//
-// Created by Nico on 009, June 9, 2020.
-//
-
 #ifndef PC_2020A_6_TPE_SOCKSV5_REQUEST_PARSER_H
 #define PC_2020A_6_TPE_SOCKSV5_REQUEST_PARSER_H
 
@@ -142,8 +138,6 @@ struct request_parser {
     /** Private */
     enum request_state _state;
 
-    uint8_t _cmd;
-    uint8_t _atyp;
     uint8_t _port_index;
 
     uint8_t _address_index;
@@ -190,7 +184,7 @@ void request_parser_close(struct request_parser *p);
  */
 int request_parser_write_response(
         buffer *buffer,
-        const struct sockaddr_storage *client_addr,
+        const struct sockaddr_storage *server_addr,
         uint8_t reply);
 
 #endif //PC_2020A_6_TPE_SOCKSV5_REQUEST_PARSER_H

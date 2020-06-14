@@ -22,10 +22,9 @@ void request_parser_init(struct request_parser *p) {
         p->_state = request_error_missing_request;
     } else {
         p->_state = request_ver;
-        p->request->port = 0;
+        p->request->port = p->request->cmd = p->request->address_type = 0;
     }
-    p->_address_index = p->_address_length = 0;
-    p->_atyp = p->_cmd = p->_port_index = 0;
+    p->_address_index = p->_address_length = p->_port_index = 0;
 }
 
 /** entrega un byte al parser. retorna el nuevo estado del parser, o el mismo si no hubo cambios */
@@ -42,7 +41,6 @@ enum request_state request_parser_feed(struct request_parser *p, uint8_t b) {
                 p->_state = request_error_invalid_cmd;
             } else {
                 p->_state = request_rsv;
-                p->_cmd = b;
                 p->request->cmd = b;
             }
             break;
@@ -57,12 +55,11 @@ enum request_state request_parser_feed(struct request_parser *p, uint8_t b) {
                 p->_state = request_error_invalid_atyp;
             } else {
                 p->_state = request_dst_addr;
-                p->_atyp = b;
                 p->request->address_type = b;
             }
             break;
         case request_dst_addr:
-            switch (p->_atyp) {
+            switch (p->request->address_type) {
                 case REQUEST_ATYP_IPV4:
                     in = (struct sockaddr_in *) &p->request->dest_addr;
 
@@ -213,7 +210,7 @@ const char *request_parser_error(const struct request_parser *p) {
 
 /** libera recursos internos del parser */
 void request_parser_close(struct request_parser *p) {
-    if (p->_atyp == REQUEST_ATYP_DOMAIN_NAME) {
+    if (p->request->address_type == REQUEST_ATYP_DOMAIN_NAME) {
         if (p->request->domain_name != NULL) {
             free(p->request->domain_name);
         }
@@ -228,7 +225,7 @@ void request_parser_close(struct request_parser *p) {
  */
 int request_parser_write_response(
         buffer *buffer,
-        const struct sockaddr_storage *client_addr,
+        const struct sockaddr_storage *server_addr,
         const uint8_t reply)
 {
     size_t n;
@@ -236,7 +233,7 @@ int request_parser_write_response(
     struct sockaddr_in *in;
     struct sockaddr_in6 *in6;
 
-    uint16_t length = MIN_REPLY_SIZE + (client_addr->ss_family == AF_INET ? IPV4_LENGTH : IPV6_LENGTH);
+    uint16_t length = MIN_REPLY_SIZE + (server_addr->ss_family == AF_INET ? IPV4_LENGTH : IPV6_LENGTH);
     if (n < length) return -1;
 
     uint16_t i = 0;
@@ -247,8 +244,8 @@ int request_parser_write_response(
     buff[i++] = reply;
     buff[i++] = VALID_RESERVED;
 
-    if (client_addr->ss_family == AF_INET) {
-        in = (struct sockaddr_in *) client_addr;
+    if (server_addr->ss_family == AF_INET) {
+        in = (struct sockaddr_in *) server_addr;
         buff[i++] = REQUEST_ATYP_IPV4;
 
         ip = ntohl(in->sin_addr.s_addr);
@@ -259,9 +256,9 @@ int request_parser_write_response(
         }
 
         buff[i++] = (in->sin_port >> 8u);
-        buff[i] = (in->sin_port & 0xFFu);
+        buff[i++] = (in->sin_port & 0xFFu);
     } else {
-        in6 = (struct sockaddr_in6 *) client_addr;
+        in6 = (struct sockaddr_in6 *) server_addr;
         buff[i++] = REQUEST_ATYP_IPV6;
 
         address_i = IPV6_LENGTH - 1;
@@ -271,7 +268,7 @@ int request_parser_write_response(
         }
 
         buff[i++] = (in6->sin6_port >> 8u);
-        buff[i] = (in6->sin6_port & 0xFFu);
+        buff[i++] = (in6->sin6_port & 0xFFu);
     }
 
     buffer_write_adv(buffer, length);
