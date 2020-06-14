@@ -25,8 +25,11 @@
 #include <limits.h>
 
 #include "utils/selector.h"
+#include "utils/log_helper.h"
 #include "socks5/socks5nio.h"
 #include "socks5/message/auth_user_pass_helper.h"
+
+#define SYSTEM_LOG_FILENAME "system.log"
 
 static bool done = false;
 
@@ -38,6 +41,9 @@ sigterm_handler(const int signal) {
 
 int
 main(const int argc, const char **argv) {
+    log_t system_log = init_system_log(SYSTEM_LOG_FILENAME, log_severity_debug);
+    if (system_log == NULL) fprintf(stderr, "Couldn't initialize system_log");
+    enum auth_user_pass_helper_status auth_status = auth_user_pass_helper_status_error_not_initialized;
     unsigned port = 1080;
 
     if (argc == 1) {
@@ -49,12 +55,19 @@ main(const int argc, const char **argv) {
         if (end == argv[1] || '\0' != *end
             || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)
             || sl < 0 || sl > USHRT_MAX) {
-            fprintf(stderr, "port should be an integer: %s\n", argv[1]);
+            fprintf(stderr, "Port should be an integer: %s\n", argv[1]);
+
+            if (system_log != NULL) {
+                append_to_log(system_log, log_severity_error, "Port should be an integer: %s", 1, argv[1]);
+            }
             return 1;
         }
         port = sl;
     } else {
         fprintf(stderr, "Usage: %s <port>\n", argv[0]);
+        if (system_log != NULL) {
+            append_to_log(system_log, log_severity_error, "Usage: %s <port>", 1, argv[0]);
+        }
         return 1;
     }
 
@@ -73,7 +86,7 @@ main(const int argc, const char **argv) {
 
     const int server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (server < 0) {
-        err_msg = "unable to create socket";
+        err_msg = "Unable to create socket";
         goto finally;
     }
 
@@ -132,9 +145,12 @@ main(const int argc, const char **argv) {
         goto finally;
     }
 
-    enum auth_user_pass_helper_status auth_status = auth_user_pass_helper_init();
+    auth_status = auth_user_pass_helper_init();
     if (auth_status != auth_user_pass_helper_status_ok)
         fprintf(stderr, "Error initializing authentication module with code: %d\n", auth_status);
+    if (system_log != NULL) {
+        append_to_log(system_log, log_severity_info, "Server up with TCP port %d", 1, port);
+    }
     for (; !done;) {
         err_msg = NULL;
         ss = selector_select(selector);
@@ -154,9 +170,18 @@ main(const int argc, const char **argv) {
                 ss == SELECTOR_IO
                 ? strerror(errno)
                 : selector_error(ss));
+        if (system_log != NULL) {
+            append_to_log(system_log, log_severity_error, "%s: %s", 2,
+                    (err_msg == NULL) ? "" : err_msg,
+                    ss == SELECTOR_IO ? strerror(errno) : selector_error(ss)
+            );
+        }
         ret = 2;
     } else if (err_msg) {
         perror(err_msg);
+        if (system_log != NULL) {
+            append_to_log(system_log, log_severity_error, "%s: %s", 2, err_msg, strerror(errno));
+        }
         ret = 1;
     }
     if (selector != NULL) {
@@ -165,6 +190,10 @@ main(const int argc, const char **argv) {
     selector_close();
 
     socksv5_pool_destroy();
+    if (system_log != NULL) {
+        close_system_log();
+        system_log = NULL;
+    }
 
     if (auth_status == auth_user_pass_helper_status_ok) auth_user_pass_helper_close();
     if (server >= 0) close(server);

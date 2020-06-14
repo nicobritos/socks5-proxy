@@ -896,7 +896,7 @@ static void *request_resolve_blocking(void *data) {
     getaddrinfo(s->client.request.request.domain_name, buffer, &hints, &s->origin_resolution);
     selector_notify_block(key->s, key->fd);
     free(data);
-    return 0;
+    return NULL;
 }
 
 /** procesa el resultado de la resoluicion de nombres */

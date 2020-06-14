@@ -15,6 +15,7 @@ set(SOURCE_FILES
         src/socks5/message/parser/request_parser.c
         src/socks5/message/auth_user_pass_helper.c
         src/utils/sorted_hashmap.c
+        src/utils/log_helper.c
 )
 
 add_executable(PC-2020A-6-TPE.SOCKSV5 src/main.c ${SOURCE_FILES})
