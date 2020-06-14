@@ -8,8 +8,6 @@
 #include "../../utils/sorted_hashmap.h"
 #include <string.h>
 
-// TODO: Manejar concurrencia
-
 #define INITIAL_HASHMAP_SIZE 50
 #define INITIAL_HASH_VALUE 5381u
 #define SHIFT_HASH_VALUE 5u
