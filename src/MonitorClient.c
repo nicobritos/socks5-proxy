@@ -25,22 +25,18 @@
 
 static int connSock;
 
+
 int main(int argc, char* argv[]){
 
-    struct sockaddr_in servaddr; // Structures for handling internet addresses
-    char buffer[MAX_BUFFER + 1];
-    int dataLength = 0;
+    start_connection(argc,argv);
 
-    /*Get the input from user*/
-    printf("Enter data to send: ");
-    fgets(buffer, MAX_BUFFER, stdin);
-    /* Clear the newline or carriage return from the end*/
-    buffer[strcspn(buffer, "\r\n")] = 0;
+    
 
-    dataLength = strlen(buffer);
+}
 
+static void start_connection(int argc, char* argv[]){
 
-    connSock = socket (PF_INET, SOCK_STREAM, IPPROTO_SCTP); //estoy usando IPV4
+    connSock = socket (AF_UNSPEC, SOCK_STREAM, IPPROTO_SCTP); //estoy usando IPV4
     if(connSock == -1){
         //No se pudo crear el socket
         printf("Socket creation failed\n");
@@ -66,19 +62,7 @@ int main(int argc, char* argv[]){
         exit(1);
     }
 
-    ret = sctp_sendmsg (connSock, (void *) buffer, (size_t) dataLength,NULL, 0, 0, 0, 0, 0, 0);
-
-    if(ret == -1 )
-    {
-        printf("Error in sctp_sendmsg\n");
-        perror("sctp_sendmsg()");
-    }
-    else
-        printf("Successfully sent %d bytes data to server\n", ret);
-
-    close (connSock);
-
-    return 0;
+    //deberia enviar hello????
 
 }
 
@@ -116,8 +100,26 @@ static void get_metrics(){
 
 static void get_metric(int metric){
     //definir el formato del datagrama a enviar y largo
-    uint8_t datagram[1]
+    uint8_t datagram[256]
+    int datagramLength = 1;
     int ret;
+
+    //mando solicitud
+    ret = sctp_sendmsg (connSock, (void *) datagram, (size_t) datagramLength,NULL, 0, 0, 0, 0, 0, 0);
+
+    if(ret == -1){
+        //ocurrio error
+    }
+
+    uint8_t answer[256];
+    //recibo lo solicitado
+    ret = sctp_recvmsg (connSock, (void* ) answer, sizeof (buffer),(struct sockaddr *) NULL, 0,0,0);
+
+    if(ret == -1){
+        //ocurrio error
+    }
+
+    //parsear respuesta
 
 
 }
