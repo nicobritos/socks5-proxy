@@ -6,7 +6,7 @@
 
 typedef struct hashmapCDT {
     int8_t (*cmp)(void *e1, void *e2);
-    uint64_t (*hasher)(void *e);
+    hash_t (*hasher)(void *e);
     void (*freer)(void *e);
 
     sorted_hashmap_node *overflow_nodes;
@@ -76,7 +76,7 @@ sorted_hashmap_node sorted_hashmap_find(sorted_hashmap_t hashmap, void *element)
     if (hashmap->hasher == NULL || hashmap->cmp == NULL) return NULL;
     if (hashmap->total_nodes == 0) return NULL;
 
-    uint64_t hash = hashmap->hasher(element);
+    hash_t hash = hashmap->hasher(element);
     uint64_t index = hash % hashmap->overflow_nodes_length;
     return sorted_hashmap_find_from_node_(hashmap, hashmap->overflow_nodes[index], element);
 }
@@ -129,9 +129,8 @@ static sorted_hashmap_node sorted_hashmap_find_previous_inserting_node_(sorted_h
 sorted_hashmap_node sorted_hashmap_add(sorted_hashmap_t hashmap, void *element) {
     if (hashmap == NULL || element == NULL) return NULL;
     if (hashmap->hasher == NULL || hashmap->cmp == NULL) return NULL;
-    if (hashmap->total_nodes == 0) return NULL;
 
-    uint64_t hash = hashmap->hasher(element);
+    hash_t hash = hashmap->hasher(element);
     uint64_t index = hash % hashmap->overflow_nodes_length;
     sorted_hashmap_node starting_node = hashmap->overflow_nodes[index];
     sorted_hashmap_node new_node;
@@ -194,7 +193,7 @@ void sorted_hashmap_remove(sorted_hashmap_t hashmap, sorted_hashmap_node node) {
         node->previous->next = node->next;
     } else {
         /** Es el primer nodo */
-        uint64_t hash = hashmap->hasher(node->element);
+        hash_t hash = hashmap->hasher(node->element);
         hashmap->overflow_nodes[hash % hashmap->overflow_nodes_length] = node->next;
     }
     if (node->next != NULL) {
@@ -259,7 +258,7 @@ bool sorted_hashmap_set_cmp(sorted_hashmap_t hashmap, int8_t (cmp)(void *e1, voi
  * @param hasher la funcion de hasheo
  * @return false si el hashmap ya tenia una funcion de hasheo seteada.
  */
-bool sorted_hashmap_set_hasher(sorted_hashmap_t hashmap, uint64_t (hasher)(void *e)) {
+bool sorted_hashmap_set_hasher(sorted_hashmap_t hashmap, hash_t (hasher)(void *e)) {
     if (hashmap == NULL || hasher == NULL || hashmap->hasher != NULL) return false;
     hashmap->hasher = hasher;
     return true;

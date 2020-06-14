@@ -22,10 +22,11 @@
 #include <sys/socket.h>  // socket
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <limits.h>
 
 #include "utils/selector.h"
 #include "socks5/socks5nio.h"
-#include <limits.h>
+#include "socks5/message/auth_user_pass_helper.h"
 
 static bool done = false;
 
@@ -130,6 +131,10 @@ main(const int argc, const char **argv) {
         err_msg = "registering fd";
         goto finally;
     }
+
+    enum auth_user_pass_helper_status auth_status = auth_user_pass_helper_init();
+    if (auth_status != auth_user_pass_helper_status_ok)
+        fprintf(stderr, "Error initializing authentication module with code: %d\n", auth_status);
     for (; !done;) {
         err_msg = NULL;
         ss = selector_select(selector);
@@ -161,8 +166,7 @@ main(const int argc, const char **argv) {
 
     socksv5_pool_destroy();
 
-    if (server >= 0) {
-        close(server);
-    }
+    if (auth_status == auth_user_pass_helper_status_ok) auth_user_pass_helper_close();
+    if (server >= 0) close(server);
     return ret;
 }

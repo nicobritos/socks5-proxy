@@ -10,8 +10,8 @@
 #define SOCKS_HELLO_METHOD_USERNAME_PASSWORD 0x02
 #define SOCKS_HELLO_METHOD_NO_ACCEPTABLE_METHODS 0xFF
 
-/*
- *   The client connects to the server, and sends a version
+/**
+ * The client connects to the server, and sends a version
  * identifier/method selection message:
  *
  *                 +----+----------+----------+

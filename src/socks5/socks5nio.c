@@ -523,12 +523,11 @@ static void on_hello_method(struct hello_parser *p, const uint8_t method) {
     // Prioritize Username and password authentication method
     if (*selected == SOCKS_HELLO_METHOD_USERNAME_PASSWORD)
         return;
-    if (*selected == SOCKS_HELLO_METHOD_USERNAME_PASSWORD)
-        *selected = method;
 
-    if (method == SOCKS_HELLO_METHOD_NO_AUTHENTICATION_REQUIRED) {
+    if (method == SOCKS_HELLO_METHOD_USERNAME_PASSWORD)
         *selected = method;
-    }
+    if (method == SOCKS_HELLO_METHOD_NO_AUTHENTICATION_REQUIRED)
+        *selected = method;
 }
 
 /** inicializa las variables de los estados HELLO_... */
@@ -664,12 +663,10 @@ static unsigned auth_user_pass_process(struct auth_user_pass_st *d) {
     if (!auth_user_pass_parser_set_credentials(&d->parser, &d->credentials))
         return ERROR;
 
-    uint8_t status = auth_user_pass_helper_verify(&d->credentials) == AUTH_USER_PASS_HELPER_OK ?
+    uint8_t status = auth_user_pass_helper_verify(&d->credentials) ?
             AUTH_USER_PASS_STATUS_CREDENTIALS_OK : AUTH_USER_PASS_STATUS_INVALID_CREDENTIALS;
-    if (auth_user_pass_parser_close_write_response(d->write_buffer, status) == -1) {
-        return ERROR;
-    }
-    return AUTH_USER_PASS_WRITE;
+
+    return auth_user_pass_parser_close_write_response(d->write_buffer, status) != -1 ? AUTH_USER_PASS_WRITE : ERROR;
 }
 
 static unsigned auth_user_pass_write(struct selector_key *key) {

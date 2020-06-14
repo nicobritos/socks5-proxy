@@ -7,6 +7,7 @@
 
 typedef struct hashmapCDT *sorted_hashmap_t;
 typedef struct hashmap_nodeCDT *sorted_hashmap_node;
+typedef uint64_t hash_t;
 
 /**
  * Crea un hashmap
@@ -73,6 +74,6 @@ bool sorted_hashmap_set_cmp(sorted_hashmap_t hashmap, int8_t (cmp)(void *e1, voi
  * @param hasher la funcion de hasheo
  * @return false si el hashmap ya tenia una funcion de hasheo seteada.
  */
-bool sorted_hashmap_set_hasher(sorted_hashmap_t hashmap, uint64_t (hasher)(void *e));
+bool sorted_hashmap_set_hasher(sorted_hashmap_t hashmap, hash_t (hasher)(void *e));
 
 #endif //PC_2020A_6_TPE_SOCKSV5_SORTED_HASHMAP_H
