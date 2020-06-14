@@ -61,7 +61,7 @@ enum auth_user_pass_state auth_user_pass_parser_feed(struct auth_user_pass_parse
         case auth_user_pass_pass:
             p->_password[p->_password_index++] = b;
             if (p->_password_index == p->_password_length) {
-                p->_username[p->_password_index] = '\0';
+                p->_password[p->_password_index] = '\0';
                 p->_state = auth_user_pass_ok;
             }
             break;
