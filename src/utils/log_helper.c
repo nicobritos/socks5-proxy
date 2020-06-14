@@ -155,7 +155,6 @@ void append_to_log(log_t log, enum log_severity severity, const char *s, int arg
     vsprintf(out, s, args);
     va_end(args);
 
-
     /** Formateamos el string final con el datetime y el severity */
     time_t timer;
     char buffer[26];
@@ -268,7 +267,7 @@ static void *thread_loop_(void *l) {
     while (!log->done) {
         sem_wait(&log->semaphore);
 
-        while (log->count > 0) {
+        if (log->count > 0) {
             fputs(log->first->s, log->file);
             fflush(log->file);
 

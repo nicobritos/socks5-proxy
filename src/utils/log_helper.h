@@ -1,6 +1,8 @@
 #ifndef PC_2020A_6_TPE_SOCKSV5_LOG_HELPER_H
 #define PC_2020A_6_TPE_SOCKSV5_LOG_HELPER_H
 
+#define LOG_LEVEL log_severity_debug
+
 enum log_severity {
     log_severity_debug,
     log_severity_info,

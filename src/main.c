@@ -41,7 +41,7 @@ sigterm_handler(const int signal) {
 
 int
 main(const int argc, const char **argv) {
-    log_t system_log = init_system_log(SYSTEM_LOG_FILENAME, log_severity_debug);
+    log_t system_log = init_system_log(SYSTEM_LOG_FILENAME, LOG_LEVEL);
     if (system_log == NULL) fprintf(stderr, "Couldn't initialize system_log");
     enum auth_user_pass_helper_status auth_status = auth_user_pass_helper_status_error_not_initialized;
     unsigned port = 1080;
@@ -151,6 +151,8 @@ main(const int argc, const char **argv) {
     if (system_log != NULL) {
         append_to_log(system_log, log_severity_info, "Server up with TCP port %d", 1, port);
     }
+
+    socksv5_init();
     for (; !done;) {
         err_msg = NULL;
         ss = selector_select(selector);
