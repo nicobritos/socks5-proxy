@@ -30,7 +30,13 @@ int main(int argc, char* argv[]){
 
     start_connection(argc,argv);
 
-    
+    while(1){
+
+        //loggear al usuario
+
+        get_metrics();
+
+    }
 
 }
 
