@@ -24,8 +24,8 @@ enum states {
     ST_USER_SPACE,
     ST_USERNAME,
     ST_USERNAME_END,
-    ST_USER_RESPONSE_OK_PLUS,
     ST_USER_RESPONSE_ERR,
+    ST_USER_RESPONSE_OK_PLUS,
     ST_USER_RESPONSE_OK_O,
     ST_USER_RESPONSE_OK_K,
     ST_USER_RESPONSE_OK_SPACE,
@@ -37,8 +37,8 @@ enum states {
     ST_PASS_SPACE,
     ST_PASSWORD,
     ST_PASSWORD_END,
-    ST_PASS_RESPONSE_OK_PLUS,
     ST_PASS_RESPONSE_ERR,
+    ST_PASS_RESPONSE_OK_PLUS,
     ST_PASS_RESPONSE_OK_O,
     ST_FINISHED,
 };
@@ -110,15 +110,13 @@ finished(struct parser_event *ret, const uint8_t c) {
     ret->data[0] = c;
 }
 
-
-
 static const struct parser_state_transition START [] =  {
     {.when = 'U',        .dest = ST_USER_U,                 .act1 = next_state,},
     {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
 };
 
 static const struct parser_state_transition UNIMPORTANT_LINE [] =  {
-    {.when = '\n',       .dest = ST_START,                 .act1 = next_state,},
+    {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
     {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
 };
 
@@ -167,7 +165,7 @@ static const struct parser_state_transition USERNAME_END [] =  {
     {.when = '-',        .dest = ST_USER_RESPONSE_ERR,      .act1 = erase_user,},
     {.when = '\0',       .dest = ST_USERNAME_END,           .act1 = next_state,},
     {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
-    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
+    {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = erase_user,},
 };
 
 static const struct parser_state_transition USER_RESPONSE_ERR [] =  {
@@ -198,8 +196,8 @@ static const struct parser_state_transition USER_RESPONSE_OK_K [] =  {
 };
 
 static const struct parser_state_transition USER_RESPONSE_OK_SPACE [] =  {
-    {.when = '\0',       .dest = ST_USER_RESPONSE_OK_SPACE, .act1 = next_state,},
-    {.when = ANY,        .dest = ST_USER_RESPONSE_OK_END,   .act1 = next_state,},
+    {.when = '\n',        .dest = ST_USER_RESPONSE_OK_END,  .act1 = next_state,},
+    {.when = ANY,         .dest = ST_USER_RESPONSE_OK_SPACE,.act1 = next_state,},
 };
 
 static const struct parser_state_transition USER_RESPONSE_OK_END [] =  {
@@ -231,8 +229,8 @@ static const struct parser_state_transition PASS_S [] =  {
 };
 
 static const struct parser_state_transition PASS_S_2 [] =  {
-    {.when = ' ',        .dest = ST_PASS_SPACE,               .act1 = next_state,},
-    {.when = '\0',       .dest = ST_PASS_S_2,                 .act1 = next_state,},
+    {.when = ' ',        .dest = ST_PASS_SPACE,             .act1 = next_state,},
+    {.when = '\0',       .dest = ST_PASS_S_2,               .act1 = next_state,},
     {.when = '\n',       .dest = ST_START,                  .act1 = next_state,},
     {.when = ANY,        .dest = ST_UNIMPORTANT_LINE,       .act1 = next_state,},
 };
@@ -289,6 +287,7 @@ static const struct parser_state_transition *states [] = {
     USER_E,
     USER_R,
     USER_SPACE,
+    USERNAME,
     USERNAME_END,
     USER_RESPONSE_ERR,
     USER_RESPONSE_OK_PLUS,
@@ -319,6 +318,7 @@ static const size_t states_n [] = {
     N(USER_E),
     N(USER_R),
     N(USER_SPACE),
+    N(USERNAME),
     N(USERNAME_END),
     N(USER_RESPONSE_ERR),
     N(USER_RESPONSE_OK_PLUS),
@@ -360,7 +360,7 @@ struct pop3_credentials * pop3_credentials_init(){
 }
 
 struct pop3_credentials * pop3_sniffer_consume(struct parser * parser, struct pop3_credentials * pop3_credentials, char * s){
-   for(int i = 0; s[i]; i++){
+    for(int i = 0; s[i] && !(pop3_credentials->finished); i++){
         struct parser_event * ret = parser_feed(parser, s[i]);
         switch (ret->type)
         {
@@ -400,6 +400,8 @@ struct pop3_credentials * pop3_sniffer_consume(struct parser * parser, struct po
                 }
                 pop3_credentials->password_length = 0;
                 break;
+            case FINISHED_T:
+                pop3_credentials->finished = 1;
         }
     }
     return pop3_credentials;
@@ -489,10 +491,10 @@ int main(int argc, char ** argv){
     struct pop3_credentials * ans = pop3_sniffer_consume(pop3_sniffer_init(), pop3_credentials_init(), buffer);
     printf("%d\n", ans->finished);
     if(ans->finished){
-        printf("%s\n", ans->user);
-        printf("%s\n", ans->password);
+        printf("User: %s\n", ans->user);
+        printf("Password: %s\n", ans->password);
     }
-    printf("%d\n", ans->error);
+    printf("Esto deberia ser 0: %d\n", ans->error);
     free_pop3_credentials(ans);
     free(buffer);
     return 0;
