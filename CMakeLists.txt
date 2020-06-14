@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.1)
 project(PC-2020A-6-TPE.SOCKSV5)
 
 set(CMAKE_C STANDARD 11)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic -Wall -Wextra -Werror -std=c11 -Wno-unused-parameter -fsanitize=address -D_GNU_SOURCE")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic -Wall -Wextra -Werror -std=c11 -Wno-unused-parameter -D_GNU_SOURCE")
 set(SOURCE_FILES
         src/utils/buffer.c
         src/utils/netutils.c
@@ -17,9 +17,6 @@ set(SOURCE_FILES
         src/utils/sorted_hashmap.c
 )
 
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
-
 add_executable(PC-2020A-6-TPE.SOCKSV5 src/main.c ${SOURCE_FILES})
 
-target_link_libraries(PC-2020A-6-TPE.SOCKSV5 Threads::Threads)
+set_target_properties(PC-2020A-6-TPE.SOCKSV5 PROPERTIES COMPILE_FLAGS -pthread LINK_FLAGS -pthread)
