@@ -3,6 +3,8 @@
 
 #include "../utils/selector.h"
 
+void socksv5_init();
+
 void socksv5_pool_destroy();
 
 void socksv5_passive_accept(struct selector_key *key);

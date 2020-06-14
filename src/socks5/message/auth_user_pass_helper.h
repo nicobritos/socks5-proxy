@@ -19,8 +19,8 @@ enum auth_user_pass_helper_status {
 };
 
 struct auth_user_pass_credentials {
-    const char *username;
-    const char *password;
+    char *username;
+    char *password;
     /** Guardamos el largo del username para evitar volver a recorrerlo */
     uint8_t username_length;
 };

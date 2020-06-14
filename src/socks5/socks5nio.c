@@ -19,10 +19,12 @@
 
 #include "../utils/stm.h"
 #include "socks5nio.h"
+#include "../utils/log_helper.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 /** obtiene el struct (socks5 *) desde la llave de selección  */
 #define ATTACHMENT(key) ( (struct socks5 *)(key)->data)
+#define SOCKS_LOG_FILENAME "socks.log"
 
 /** maquina de estados general */
 enum socks_v5state {
@@ -157,7 +159,7 @@ struct auth_user_pass_st {
     buffer *read_buffer, *write_buffer;
 
     struct auth_user_pass_parser parser;
-    struct auth_user_pass_credentials credentials;
+    struct auth_user_pass_credentials *credentials;
 };
 
 struct request_st {
@@ -231,6 +233,8 @@ struct socks5 {
         struct copy copy;
     } server;
 
+    struct auth_user_pass_credentials credentials;
+
     /** buffers para ser usados read_buffer, write_buffer */
     uint8_t raw_buff_a[8*1024], raw_buff_b[8 * 1024];
     buffer read_buffer, write_buffer;
@@ -250,6 +254,7 @@ struct socks5 {
 static const unsigned max_pool = 500;
 static unsigned pool_size = 0;
 static struct socks5 *pool = NULL;
+static log_t logger;
 
 /** -------------------- DECLARATIONS --------------------- */
 /** ---------------- SOCKSV5 ---------------- */
@@ -257,6 +262,15 @@ static struct socks5 *socks5_new(int client_fd);
 static const struct state_definition *socks5_describe_states();
 static void socks5_destroy(struct socks5 *s);
 static void socks5_destroy_(struct socks5 *s);
+
+/**
+ * Escribe la IP en el buffer y almacena el puerto en una variable.
+ * @param s
+ * @param buffer
+ * @param port
+ * @return false si hubo un error
+ */
+static bool extract_ip_port_(const struct sockaddr_storage *s, char *buffer, uint16_t *port);
 
 /**
  * Handlers socksv5
@@ -288,7 +302,7 @@ static unsigned hello_write(struct selector_key *key);
 static void auth_user_pass_read_init(unsigned state, struct selector_key *key);
 static unsigned auth_user_pass_read(struct selector_key *key);
 static void auth_user_pass_read_close(unsigned state, struct selector_key *key);
-static unsigned auth_user_pass_process(struct auth_user_pass_st *d);
+static unsigned auth_user_pass_process(struct auth_user_pass_st *d, const struct selector_key *key);
 static unsigned auth_user_pass_write(struct selector_key *key);
 
 /** ---------------- REQUEST ---------------- */
@@ -298,6 +312,7 @@ static void request_read_close(unsigned state, struct selector_key *key);
 static unsigned request_process(struct selector_key *key, struct request_st *d);
 static unsigned request_connect(struct selector_key *key, struct request_st *d);
 static unsigned request_write(struct selector_key *key);
+static void log_request(const struct selector_key *key);
 
 /** ---------------- REQUEST RESOLVE ---------------- */
 static void *request_resolve_blocking(void *data);
@@ -362,12 +377,18 @@ static const struct state_definition client_statbl[] = {
 /** -------------------- DEFINITIONS --------------------- */
 /** ---------------- SOCKSV5 ---------------- */
 /** ---------------- PUBLIC ---------------- */
+void socksv5_init() {
+    logger = init_log(SOCKS_LOG_FILENAME, LOG_LEVEL);
+}
+
 void socksv5_pool_destroy() {
     struct socks5 *next, *s;
     for (s = pool; s != NULL; s = next) {
         next = s->next;
         free(s);
     }
+    close_log(logger);
+    logger = NULL;
 }
 
 /** Intenta aceptar la nueva conexión entrante*/
@@ -462,6 +483,28 @@ static void socks5_destroy_(struct socks5 *s) {
 }
 
 /**
+ * Escribe la IP en el buffer y almacena el puerto en una variable.
+ * @param s
+ * @param buffer
+ * @param port
+ * @return false si hubo un error
+ */
+static bool extract_ip_port_(const struct sockaddr_storage *s, char *buffer, uint16_t *port) {
+    struct sockaddr_in *in;
+    struct sockaddr_in6 *in6;
+    if (s->ss_family == AF_INET) {
+        in = (struct sockaddr_in *) s;
+        *port = in->sin_port;
+        return inet_ntop(AF_INET, &in->sin_addr, buffer, INET_ADDRSTRLEN);
+    } else if (s->ss_family == AF_INET6) {
+        in6 = (struct sockaddr_in6 *) s;
+        *port = in6->sin6_port;
+        return inet_ntop(AF_INET6, &in6->sin6_addr, buffer, INET6_ADDRSTRLEN);
+    }
+    return false;
+}
+
+/**
  * Handlers socksv5
  * Declaración forward de los handlers de selección de una conexión
  * establecida entre un cliente y el proxy.
@@ -496,12 +539,24 @@ static void socksv5_block(struct selector_key *key) {
 }
 
 static void socksv5_close(struct selector_key *key) {
+    if (ATTACHMENT(key)->credentials.username != NULL) {
+        free(ATTACHMENT(key)->credentials.username);
+        ATTACHMENT(key)->credentials.username = NULL;
+    }
+    if (ATTACHMENT(key)->credentials.password != NULL) {
+        free(ATTACHMENT(key)->credentials.password);
+        ATTACHMENT(key)->credentials.password = NULL;
+    }
     socks5_destroy(ATTACHMENT(key));
 }
 
 static void socksv5_done(struct selector_key* key) {
-    close_fd_(ATTACHMENT(key)->client_fd, key);
-    close_fd_(ATTACHMENT(key)->server_fd, key);
+    if (ATTACHMENT(key)->client_fd != -1) {
+        close_fd_(ATTACHMENT(key)->client_fd, key);
+    }
+    if (ATTACHMENT(key)->server_fd != -1) {
+        close_fd_(ATTACHMENT(key)->server_fd, key);
+    }
     ATTACHMENT(key)->client_fd = ATTACHMENT(key)->server_fd = -1;
 }
 
@@ -602,10 +657,25 @@ static unsigned hello_write(struct selector_key *key) {
         buffer_read_adv(d->write_buffer, n);
         if (!buffer_can_read(d->write_buffer)) {
             if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
-                if (d->method == SOCKS_HELLO_METHOD_USERNAME_PASSWORD)
+                if (d->method == SOCKS_HELLO_METHOD_USERNAME_PASSWORD) {
                     ret = AUTH_USER_PASS_READ;
-                else
+                } else {
                     ret = REQUEST_READ;
+                    if (logger != NULL) {
+                        char ip_buffer[INET6_ADDRSTRLEN];
+                        uint16_t port;
+                        if (extract_ip_port_(&ATTACHMENT(key)->client_addr, ip_buffer, &port)) {
+                            append_to_log(
+                                    logger,
+                                    log_severity_info,
+                                    "El usuario con ip: %s y puerto %d se conecto sin autenticacion",
+                                    2,
+                                    ip_buffer,
+                                    port
+                            );
+                        }
+                    }
+                }
             } else {
                 ret = ERROR;
             }
@@ -622,6 +692,7 @@ static void auth_user_pass_read_init(const unsigned state, struct selector_key *
 
     d->read_buffer = &(ATTACHMENT(key)->read_buffer);
     d->write_buffer = &(ATTACHMENT(key)->write_buffer);
+    d->credentials = &(ATTACHMENT(key))->credentials;
 
     auth_user_pass_parser_init(&d->parser);
 }
@@ -642,7 +713,7 @@ static unsigned auth_user_pass_read(struct selector_key *key) {
         const enum auth_user_pass_state st = auth_user_pass_parser_consume(d->read_buffer, &d->parser, &error);
         if (auth_user_pass_parser_is_done(st, NULL)) {
             if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
-                ret = auth_user_pass_process(d);
+                ret = auth_user_pass_process(d, key);
             } else {
                 ret = ERROR;
             }
@@ -659,12 +730,39 @@ static void auth_user_pass_read_close(const unsigned state, struct selector_key 
     auth_user_pass_parser_close(&d->parser);
 }
 
-static unsigned auth_user_pass_process(struct auth_user_pass_st *d) {
-    if (!auth_user_pass_parser_set_credentials(&d->parser, &d->credentials))
+static unsigned auth_user_pass_process(struct auth_user_pass_st *d, const struct selector_key *key) {
+    if (!auth_user_pass_parser_set_credentials(&d->parser, d->credentials))
         return ERROR;
 
-    uint8_t status = auth_user_pass_helper_verify(&d->credentials) ?
+    uint8_t status = auth_user_pass_helper_verify(d->credentials) ?
             AUTH_USER_PASS_STATUS_CREDENTIALS_OK : AUTH_USER_PASS_STATUS_INVALID_CREDENTIALS;
+
+    if (logger != NULL) {
+        char ip_buffer[INET6_ADDRSTRLEN];
+        uint16_t port;
+        if (extract_ip_port_(&ATTACHMENT(key)->client_addr, ip_buffer, &port)) {
+            if (status == AUTH_USER_PASS_STATUS_CREDENTIALS_OK) {
+                append_to_log(
+                        logger,
+                        log_severity_info,
+                        "El usuario con ip: %s y puerto %d se conecto como %s",
+                        3,
+                        ip_buffer,
+                        port,
+                        d->credentials->username
+                );
+            } else {
+                append_to_log(
+                        logger,
+                        log_severity_info,
+                        "El usuario con ip: %s y puerto %d intento conectarse con credenciales invalidas",
+                        2,
+                        ip_buffer,
+                        port
+                );
+            }
+        }
+    }
 
     return auth_user_pass_parser_close_write_response(d->write_buffer, status) != -1 ? AUTH_USER_PASS_WRITE : ERROR;
 }
@@ -769,9 +867,9 @@ static unsigned request_process(struct selector_key *key, struct request_st *d) 
                         selector_set_interest_key(key, OP_WRITE);
                         return REQUEST_WRITE;
                     } else {
-                        pthread_t thread_id;
+                        pthread_t thread;
                         memcpy(key_copy, key, sizeof(*key_copy));
-                        if (pthread_create(&thread_id, 0, request_resolve_blocking, key_copy) != 0) {
+                        if (pthread_create(&thread, 0, request_resolve_blocking, key_copy) != 0) {
                             d->status = socks_status_general_SOCKS_server_failure;
                             selector_set_interest_key(key, OP_WRITE);
                             return REQUEST_WRITE;
@@ -865,12 +963,81 @@ static unsigned request_write(struct selector_key *key) {
                     selector_set_interest(key->s, *d->server_fd, OP_NOOP);
                 }
             }
+
+            log_request(key);
         }
     }
 
-    // TODO: Log req
-
     return ret;
+}
+
+static void log_request(const struct selector_key *key) {
+    const struct socks5 *s = ATTACHMENT(key);
+
+    if (logger != NULL) {
+        char ip_buffer_client[INET6_ADDRSTRLEN];
+        char ip_buffer_server[INET6_ADDRSTRLEN];
+        uint16_t port_client;
+        uint16_t port_server;
+        if (!extract_ip_port_(&s->client_addr, ip_buffer_client, &port_client)
+            || !extract_ip_port_(&s->server_addr, ip_buffer_server, &port_server)) {
+            return;
+        }
+
+        if (s->credentials.username != NULL) {
+            if (s->client.request.request.address_type == REQUEST_ATYP_DOMAIN_NAME) {
+                append_to_log(
+                        logger,
+                        log_severity_info,
+                        "El usuario: %s con ip: %s y puerto %d se conecto a: %s [%s] al puerto %d",
+                        6,
+                        s->credentials.username,
+                        ip_buffer_client,
+                        port_client,
+                        s->client.request.request.domain_name,
+                        ip_buffer_server,
+                        port_server
+                );
+            } else {
+                append_to_log(
+                        logger,
+                        log_severity_info,
+                        "El usuario: %s con ip: %s y puerto %d se conecto a: %s al puerto %d",
+                        5,
+                        s->credentials.username,
+                        ip_buffer_client,
+                        port_client,
+                        ip_buffer_server,
+                        port_server
+                );
+            }
+        } else {
+            if (s->client.request.request.address_type == REQUEST_ATYP_DOMAIN_NAME) {
+                append_to_log(
+                        logger,
+                        log_severity_info,
+                        "El usuario con ip: %s y puerto %d se conecto a: %s [%s] al puerto %d",
+                        5,
+                        ip_buffer_client,
+                        port_client,
+                        s->client.request.request.domain_name,
+                        ip_buffer_server,
+                        port_server
+                );
+            } else {
+                append_to_log(
+                        logger,
+                        log_severity_info,
+                        "El usuario con ip: %s y puerto %d se conecto a: %s al puerto %d",
+                        4,
+                        ip_buffer_client,
+                        port_client,
+                        ip_buffer_server,
+                        port_server
+                );
+            }
+        }
+    }
 }
 
 

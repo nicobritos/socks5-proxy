@@ -87,7 +87,7 @@ enum auth_user_pass_helper_status auth_user_pass_helper_remove(const char *usern
     if (username == NULL || *username == '\0') return auth_user_pass_helper_status_error_invalid_credentials;
 
     struct auth_user_pass_credentials credentials = {
-            .username = username,
+            .username = (char *)username,
             .username_length = strlen(username),
             .password = NULL
     };

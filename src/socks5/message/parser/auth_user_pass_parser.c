@@ -3,6 +3,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "auth_user_pass_parser.h"
 
@@ -123,9 +124,18 @@ bool auth_user_pass_parser_set_credentials(const struct auth_user_pass_parser *p
     if (!auth_user_pass_parser_is_done(parser->_state, NULL))
         return false;
 
-    credentials->username = parser->_username;
+    credentials->username = malloc(sizeof(*credentials->username) * (parser->_username_length + 1));
+    if (credentials->username == NULL) return false;
+    memcpy(credentials->username, parser->_username, parser->_username_length + 1);
     credentials->username_length = parser->_username_length;
-    credentials->password = parser->_password;
+
+    uint64_t password_length = strlen(parser->_password);
+    credentials->password = malloc(sizeof(*credentials->password) * (password_length + 1));
+    if (credentials->password == NULL) {
+        free(credentials->username);
+        return false;
+    }
+    memcpy(credentials->password, parser->_password, password_length + 1);
     return true;
 }
 
