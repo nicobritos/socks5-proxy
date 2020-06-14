@@ -15,7 +15,7 @@
 #include <netinet/sctp.h>
 #include <arpa/inet.h>
 
-#include "include/SCTPClient.h"
+#include "include/MonitorClient.h"
 
 #define MAX_BUFFER 1024
 #define MY_PORT_NUM 62324
