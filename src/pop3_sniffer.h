@@ -2,12 +2,11 @@
 #define POP3_SNIFFER_H_
 
 /**
- * http_response_parser.c -- parser de respuestas HTTP.
+ * pop3_sniffer.c -- parser de pop3 para obtener usuario y contraseña.
  *
- * Permite extraer de una respuesta HTTP :
- *      1. El codigo de estado HTTP de la respuesta
- *      2. La descripción del codigo de la respuesta
- *      3. Los bytes en la sección del cuerpo de la respuesta (si la hubiere)
+ * Permite extraer de una conversacion POP3 :
+ *      1. El usuario y la longitud de ese string
+ *      2. La contraseña y la longitud de ese string
  */
 #include <stdint.h>
 #include <stddef.h>
