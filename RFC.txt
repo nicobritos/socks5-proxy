@@ -1,0 +1,78 @@
+Configure and Monitor for SOCKS V5 Server
+
+1. Initial negotiation
+
+   Once the SOCKS V5 server has started, and the client has connected to the
+   monitor port (default xxxx).
+   
+   Username/Password request:
+
+           +----+------+----------+------+----------+
+           |VER | ULEN |  UNAME   | PLEN |  PASSWD  |
+           +----+------+----------+------+----------+
+           | 1  |  1   | 1 to 255 |  1   | 1 to 255 |
+           +----+------+----------+------+----------+
+
+   The VER field contains the current version of the subnegotiation,
+   which is X'01'. The ULEN field contains the length of the UNAME field
+   that follows. The UNAME field contains the username as known to the
+   source operating system. The PLEN field contains the length of the
+   PASSWD field that follows. The PASSWD field contains the password
+   association with the given UNAME.
+
+   The server verifies the supplied UNAME and PASSWD, and sends the
+   following response:
+
+                        +----+--------+
+                        |VER | STATUS |
+                        +----+--------+
+                        | 1  |   1    |
+                        +----+--------+
+
+   A STATUS field of X'00' indicates success. If the server returns a
+   `failure' (STATUS value other than X'00') status, it MUST close the
+   connection.
+
+2. Monitor and Configure
+
+    Once logged in the server sends the following metrics:
+        
+        o   ECON - number of establised connections
+        o   ACON - number of actual connections
+        o   BYTES - total bytes transferred
+
+           +----------+----------+----------+
+           |   ECON   |   ACON   |  BYTES   | 
+           +----------+----------+----------+
+           |  32 bits |  32 bits |  64 bits |  
+           +----------+----------+----------+
+
+
+        Commands
+                          Request format
+                +----------+----------+----------+
+                |   CODE   |   ARG    |   MODE   | 
+                +----------+----------+----------+
+                |  8 bits  |  32 bits |   1 bit  |  
+                +----------+----------+----------+
+
+        This server received this request.
+        CODE represents the command code, ARG the argument if it is needed
+        and MODE can be 1 for write and 0 for read. 
+
+        o METRICS - CODE 0x01 - send actual value of ECON, ACON and bytes. Refreshed what is sent 
+        and the beggining of the connection
+
+        o CREDENTIALS - CODE 0x02 - send sniffed credentials on an string, with the following format:
+
+        [SYS_USER],[PROTOCOL],[SNI_USER],[SNI_PASS]\0
+
+        o I/O BUFFER - CODE 0x03
+
+        o Doh Server IP - CODE 0x04
+
+
+
+
+
+
