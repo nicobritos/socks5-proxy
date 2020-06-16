@@ -20,6 +20,7 @@
 #include "../utils/stm.h"
 #include "socks5nio.h"
 #include "../utils/log_helper.h"
+#include "../utils/byte_formatter.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 /** obtiene el struct (socks5 *) desde la llave de selección  */
@@ -239,6 +240,9 @@ struct socks5 {
     uint8_t raw_buff_a[8*1024], raw_buff_b[8 * 1024];
     buffer read_buffer, write_buffer;
 
+    uint64_t bytes_downloaded;
+    uint64_t bytes_uploaded;
+
     /** cantidad de referencias a este objecto. == 1 -> eliminar */
     unsigned references;
 
@@ -283,6 +287,7 @@ static void socksv5_block(struct selector_key *key);
 static void socksv5_close(struct selector_key *key);
 static void socksv5_done(struct selector_key* key);
 static void close_fd_(int fd, struct selector_key* key);
+static void log_close(const struct selector_key *key);
 static const struct fd_handler socks5_handler = {
         .handle_read   = socksv5_read,
         .handle_write  = socksv5_write,
@@ -312,7 +317,7 @@ static void request_read_close(unsigned state, struct selector_key *key);
 static unsigned request_process(struct selector_key *key, struct request_st *d);
 static unsigned request_connect(struct selector_key *key, struct request_st *d);
 static unsigned request_write(struct selector_key *key);
-static void log_request(const struct selector_key *key);
+static void log_request(const struct selector_key *key, const struct request_parser *p, enum socks_response_status socks_status);
 
 /** ---------------- REQUEST RESOLVE ---------------- */
 static void *request_resolve_blocking(void *data);
@@ -539,13 +544,18 @@ static void socksv5_block(struct selector_key *key) {
 }
 
 static void socksv5_close(struct selector_key *key) {
-    if (ATTACHMENT(key)->credentials.username != NULL) {
-        free(ATTACHMENT(key)->credentials.username);
-        ATTACHMENT(key)->credentials.username = NULL;
-    }
-    if (ATTACHMENT(key)->credentials.password != NULL) {
-        free(ATTACHMENT(key)->credentials.password);
-        ATTACHMENT(key)->credentials.password = NULL;
+    if (ATTACHMENT(key)->references == 1) {
+        if (ATTACHMENT(key)->client_fd != -1) {
+            log_close(key);
+        }
+        if (ATTACHMENT(key)->credentials.username != NULL) {
+            free(ATTACHMENT(key)->credentials.username);
+            ATTACHMENT(key)->credentials.username = NULL;
+        }
+        if (ATTACHMENT(key)->credentials.password != NULL) {
+            free(ATTACHMENT(key)->credentials.password);
+            ATTACHMENT(key)->credentials.password = NULL;
+        }
     }
     socks5_destroy(ATTACHMENT(key));
 }
@@ -566,6 +576,51 @@ static void close_fd_(int fd, struct selector_key* key) {
             abort();
         }
         close(fd);
+    }
+}
+
+static void log_close(const struct selector_key *key) {
+    const struct socks5 *s = ATTACHMENT(key);
+
+    if (logger != NULL) {
+        char ip_buffer_client[INET6_ADDRSTRLEN];
+        uint16_t port_client;
+        if (!extract_ip_port_(&s->client_addr, ip_buffer_client, &port_client)) {
+            return;
+        }
+
+        double formatted_bytes_download;
+        double formatted_bytes_upload;
+        const char *bytes_download_multiplier = byte_formatter_format(s->bytes_downloaded, &formatted_bytes_download);
+        const char *bytes_upload_multiplier = byte_formatter_format(s->bytes_uploaded, &formatted_bytes_upload);
+        if (s->credentials.username != NULL) {
+            append_to_log(
+                    logger,
+                    log_severity_info,
+                    "El usuario: %s con ip: %s y puerto %d se ha desconectado. Bytes transferidos: %.3f%s download, %.3f%s upload",
+                    7,
+                    s->credentials.username,
+                    ip_buffer_client,
+                    port_client,
+                    formatted_bytes_download,
+                    bytes_download_multiplier,
+                    formatted_bytes_upload,
+                    bytes_upload_multiplier
+            );
+        } else {
+            append_to_log(
+                    logger,
+                    log_severity_info,
+                    "El usuario con ip: %s y puerto %d se ha desconectado. Bytes transferidos: %.3f%s download, %.3f%s upload",
+                    6,
+                    ip_buffer_client,
+                    port_client,
+                    formatted_bytes_download,
+                    bytes_download_multiplier,
+                    formatted_bytes_upload,
+                    bytes_upload_multiplier
+            );
+        }
     }
 }
 
@@ -964,14 +1019,14 @@ static unsigned request_write(struct selector_key *key) {
                 }
             }
 
-            log_request(key);
+            log_request(key, &d->parser, d->status);
         }
     }
 
     return ret;
 }
 
-static void log_request(const struct selector_key *key) {
+static void log_request(const struct selector_key *key, const struct request_parser *p, enum socks_response_status socks_status) {
     const struct socks5 *s = ATTACHMENT(key);
 
     if (logger != NULL) {
@@ -984,31 +1039,42 @@ static void log_request(const struct selector_key *key) {
             return;
         }
 
+        bool errored = false;
+        request_parser_is_done(p->_state, &errored);
+        const char *socks_status_str = socks_response_status_str(socks_status);
+        const char *connected_str = errored ? "no se pudo conectar" : "se conecto";
+
         if (s->credentials.username != NULL) {
             if (s->client.request.request.address_type == REQUEST_ATYP_DOMAIN_NAME) {
                 append_to_log(
                         logger,
                         log_severity_info,
-                        "El usuario: %s con ip: %s y puerto %d se conecto a: %s [%s] al puerto %d",
-                        6,
+                        "El usuario: %s con ip: %s y puerto %d %s a: %s [%s] al puerto %d [mapeado al %d] con estado: %s",
+                        9,
                         s->credentials.username,
                         ip_buffer_client,
                         port_client,
+                        connected_str,
                         s->client.request.request.domain_name,
                         ip_buffer_server,
-                        port_server
+                        s->client.request.request.port,
+                        errored ? port_server : -1,
+                        socks_status_str
                 );
             } else {
                 append_to_log(
                         logger,
                         log_severity_info,
-                        "El usuario: %s con ip: %s y puerto %d se conecto a: %s al puerto %d",
-                        5,
+                        "El usuario: %s con ip: %s y puerto %d %s a: %s al puerto %d [mapeado al %d] con estado: %s",
+                        8,
                         s->credentials.username,
                         ip_buffer_client,
                         port_client,
+                        connected_str,
                         ip_buffer_server,
-                        port_server
+                        s->client.request.request.port,
+                        errored ? port_server : -1,
+                        socks_status_str
                 );
             }
         } else {
@@ -1016,24 +1082,30 @@ static void log_request(const struct selector_key *key) {
                 append_to_log(
                         logger,
                         log_severity_info,
-                        "El usuario con ip: %s y puerto %d se conecto a: %s [%s] al puerto %d",
-                        5,
+                        "El usuario con ip: %s y puerto %d %s a: %s [%s] al puerto %d [mapeado al %d] con estado: %s",
+                        8,
                         ip_buffer_client,
                         port_client,
+                        connected_str,
                         s->client.request.request.domain_name,
                         ip_buffer_server,
-                        port_server
+                        s->client.request.request.port,
+                        errored ? port_server : -1,
+                        socks_status_str
                 );
             } else {
                 append_to_log(
                         logger,
                         log_severity_info,
-                        "El usuario con ip: %s y puerto %d se conecto a: %s al puerto %d",
-                        4,
+                        "El usuario con ip: %s y puerto %d %s a: %s al puerto %d [mapeado al %d] con estado: %s",
+                        7,
                         ip_buffer_client,
                         port_client,
+                        connected_str,
                         ip_buffer_server,
-                        port_server
+                        s->client.request.request.port,
+                        errored ? port_server : -1,
+                        socks_status_str
                 );
             }
         }
@@ -1189,6 +1261,11 @@ static unsigned copy_write(struct selector_key *key) {
         }
     } else {
         buffer_read_adv(d->write_buffer, n);
+        if (*d->fd == ATTACHMENT(key)->client_fd) {
+            ATTACHMENT(key)->bytes_downloaded += n;
+        } else {
+            ATTACHMENT(key)->bytes_uploaded += n;
+        }
     }
     copy_compute_interests(key->s, d);
     copy_compute_interests(key->s, d->other);

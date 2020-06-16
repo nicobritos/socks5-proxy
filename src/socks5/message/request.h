@@ -71,4 +71,9 @@ struct request {
  */
 enum socks_response_status errno_to_socks(int e);
 
+/**
+ * Devuelve un string que representa el estado
+ */
+const char *socks_response_status_str(enum socks_response_status status);
+
 #endif //PC_2020A_6_TPE_SOCKSV5_REQUEST_HELPER_H

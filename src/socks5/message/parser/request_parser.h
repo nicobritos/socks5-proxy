@@ -173,6 +173,11 @@ bool request_parser_is_done(enum request_state state, bool *errored);
  */
 const char *request_parser_error(const struct request_parser *p);
 
+/**
+ * Devuelve un string que representa el estado del parser
+ */
+const char *request_parser_str(const struct request_parser *p);
+
 /** libera recursos internos del parser */
 void request_parser_close(struct request_parser *p);
 

@@ -161,7 +161,7 @@ void append_to_log(log_t log, enum log_severity severity, const char *s, int arg
     struct tm* tm_info;
     timer = time(NULL);
     tm_info = localtime(&timer);
-    strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
+    strftime(buffer, 26, "%Y-%m-%dT%H:%M:%S%z", tm_info);
 
     /** Calculamos el espacio que necesitamos para el string final */
     n = snprintf(NULL, 0, "[%s] [%s] %s\n", buffer, get_severity_str_(severity), out);

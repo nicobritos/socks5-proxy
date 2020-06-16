@@ -189,22 +189,29 @@ bool request_parser_is_done(enum request_state state, bool *errored) {
  */
 const char *request_parser_error(const struct request_parser *p) {
     switch (p->_state) {
-        case request_error_no_memory:
-            return "no memory available";
-        case request_error_invalid_domain_address:
-            return "invalid domain address";
-        case request_error_invalid_version:
-            return "invalid version number";
-        case request_error_invalid_atyp:
-            return "invalid ATYP value";
-        case request_error_invalid_rsv:
-            return "invalid RSV value";
         case request_error_invalid_cmd:
-            return "invalid CMD value";
-        case request_error_missing_request:
-            return "missing request parameter";
+            return "error: comando invalido";
+        case request_error_invalid_rsv:
+            return "error: rsv byte en la request invalido";
+        case request_error_invalid_atyp:
+            return "error: tipo de address en la request invalido";
+        case request_error_invalid_version:
+            return "error: version en la request invalida";
+        case request_error_no_memory:
+            return "error: no hay memoria para parsear la request";
+        case request_error_invalid_domain_address:
+            return "error: invalid domain address";
         default:
-            return "";
+            return "desconocido";
+    }
+}
+
+const char *request_parser_str(const struct request_parser *p) {
+    switch (p->_state) {
+        case request_ok:
+            return "exitoso";
+        default:
+            return request_parser_error(p);
     }
 }
 
