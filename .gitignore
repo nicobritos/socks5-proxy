@@ -2,10 +2,8 @@
 .DS_Store
 *.pdf
 */afl-output*
-src/http_response.dSYM/Contents/Resources/DWARF/http_response
 *.plist
-src/http_response
-src/pop3_sniffer.dSYM/Contents/Resources/DWARF/pop3_sniffer
 src/pop3_sniffer
-src/http_sniffer.dSYM/Contents/Resources/DWARF/http_sniffer
 src/http_sniffer
+src/http_response_parser
+*.dSYM*
