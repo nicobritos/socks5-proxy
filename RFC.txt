@@ -56,6 +56,8 @@ Configure and Monitor for SOCKS V5 Server
                 |  8 bits  |  32 bits |   1 bit  |  
                 +----------+----------+----------+
 
+
+
         This server received this request.
         CODE represents the command code, ARG the argument if it is needed
         and MODE can be 1 for write and 0 for read. 
@@ -70,6 +72,14 @@ Configure and Monitor for SOCKS V5 Server
         o I/O BUFFER - CODE 0x03
 
         o Doh Server IP - CODE 0x04
+
+
+                     Respone format
+                +----------+----------+
+                |   CODE   |   DATA   |
+                +----------+----------+
+                |  8 bits  |  32 bits | 
+                +----------+----------+
 
 
 
