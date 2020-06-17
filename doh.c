@@ -7,11 +7,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include "Practical.h"
-//#include "doh.h"
-
-#define DNS_SERVER_IP "127.0.0.1"
-#define DNS_SERVER_PORT 80
-
+#include <time.h>
+#include "http_response_parser.h"
+#include "doh.h"
 
 
 uint8_t http_header[] = {0x50, 0x4f, 0x53, 0x54, 0x20, 0x2f, 0x20, 0x48, 
@@ -46,12 +44,16 @@ uint8_t http_header[] = {0x50, 0x4f, 0x53, 0x54, 0x20, 0x2f, 0x20, 0x48,
 0x68, 0x3a, 0x20};
 
 uint8_t dns_header[] = {0x0d, 0x0a, 0x0d, 0x0a, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00,  0x00, 0x00, 0x00, 0x00, 0x00};
+
+#define DNS_END_LEN 4
 uint8_t dns_end_ipv4[] = {0x00, 0x01, 0x00, 0x01};
 uint8_t dns_end_ipv6[] = {0x00, 0x1c, 0x00, 0x01};
 
+uint8_t buffer[BUFSIZE];
 
 
-size_t bincopy(uint8_t * target, uint8_t * source, size_t from, size_t n){
+// funciones locales
+static size_t bincopy(uint8_t * target, uint8_t * source, size_t from, size_t n){
 size_t i = from;
 size_t j = 0;
 for (; i < (from + n); i++)
@@ -61,10 +63,20 @@ for (; i < (from + n); i++)
 return i;
 }
 
-uint8_t * encodeName(size_t * size, uint8_t * name){
+static uint8_t checkResponse(uint8_t * response, ssize_t len){
+   
+  for (ssize_t i = 0; i < len; i++)
+  {
+    printf("%c - 0x%x \n", response[i],response[i]);
+  }
+
+  return 0;
+}
+
+static uint8_t * encodeName(size_t * size, uint8_t * name){
     // Back up name 
     size_t name_len = strlen((char *) name);
-    uint8_t aux[name_len];
+    uint8_t aux[name_len + 1];
     strcpy((char *) aux,(char *) name);
 
     uint8_t qname[MAXSTRINGLENGTH][MAXSTRINGLENGTH];
@@ -96,7 +108,7 @@ uint8_t * encodeName(size_t * size, uint8_t * name){
 
 
 
-  uint8_t * getRequest (ssize_t * len, uint8_t * name){
+static uint8_t * getRequest (ssize_t * len, uint8_t * name, uint8_t * dns_end_ver){
   
   uint8_t * request = malloc(300);
   size_t i = 0;
@@ -105,14 +117,14 @@ uint8_t * encodeName(size_t * size, uint8_t * name){
   // encode name into dns message format 
   size_t qname_len=0;
   uint8_t * qname = encodeName(&qname_len,name);
-  //size_t dns_message_len = sizeof(dns_header) + qname_len + sizeof(dns_end);
+  //size_t dns_message_len = sizeof(dns_header) + qname_len
   size_t dns_message_len = (sizeof(dns_header) + qname_len );
   uint8_t string_len[MAXSTRINGLENGTH]={0};
   i = bincopy(request,string_len,i,sprintf((char *) string_len,"%ld",dns_message_len));
   i = bincopy(request,dns_header,i,sizeof(dns_header));
 
   i = bincopy(request,qname,i,qname_len);
-  i = bincopy(request,dns_end_ipv4,i,sizeof(dns_end_ipv4));
+  i = bincopy(request,dns_end_ver,i,DNS_END_LEN);
   
   request = realloc(request,i);
   *len = i;
@@ -120,18 +132,11 @@ uint8_t * encodeName(size_t * size, uint8_t * name){
   return request;
 }
 
-int main(int argc, char * argv[]) {
-  
-  uint8_t * hostname = (uint8_t *) "www.itba.edu.ar";
-  ssize_t req_len =0;
-  uint8_t * echoString = getRequest(&req_len,hostname);
-
-
-  // Create a reliable, stream socket using TCP
+ssize_t send_query(uint8_t * query, size_t req_len){
+    // Create a reliable, stream socket using TCP
   ssize_t sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (sock < 0)
     DieWithSystemMessage("socket() failed");
-
   // Construct the server address structure
   struct sockaddr_in servAddr;            // Server address
   memset(&servAddr, 0, sizeof(servAddr)); // Zero out structure
@@ -149,7 +154,7 @@ int main(int argc, char * argv[]) {
     DieWithSystemMessage("connect() failed");
 
   // Send the string to the server
-  ssize_t numBytes = send(sock, echoString, req_len, 0);
+  ssize_t numBytes = send(sock, query, req_len, 0);
   if (numBytes < 0)
     DieWithSystemMessage("send() failed");
   else if (numBytes != req_len)
@@ -158,8 +163,8 @@ int main(int argc, char * argv[]) {
   // Receive the same string back from the server
   ssize_t totalBytesRcvd = 0; // Count of total bytes received
   fputs("Received: ", stdout);     // Setup to prsize_t the echoed string
+  
   while (totalBytesRcvd < req_len) {
-    uint8_t buffer[BUFSIZE]; // I/O buffer
     /* Receive up to the buffer size (minus 1 to leave space for
      a null terminator) bytes from the sender */
     numBytes = recv(sock, buffer, BUFSIZE - 1, 0);
@@ -168,14 +173,64 @@ int main(int argc, char * argv[]) {
     else if (numBytes == 0)
       DieWithUserMessage("recv()", "connection closed prematurely");
     totalBytesRcvd += numBytes; // Keep tally of total bytes
-    buffer[numBytes] = '\0';    // Terminate the string!
-    fputs((char *) buffer, stdout);      // Prsize_t the echo buffer
   }
+   close(sock);
+
+   return totalBytesRcvd;
+}
 
 
 
-  fputc('\n', stdout); // Prsize_t a final linefeed
-  free(echoString);
-  close(sock);
-  exit(0);
+// INTERFACE
+struct http_response * getIpbyName(uint8_t * hostname) {
+  
+// I/O buffer
+
+  // Type A Query
+
+  ssize_t req_len =0;
+  uint8_t * query;
+  
+  query = getRequest(&req_len,hostname,dns_end_ipv4);
+  ssize_t totalBytesRcvd = 0; 
+  totalBytesRcvd =  send_query(query, req_len);
+  
+
+  
+  struct http_response * myentry = http_response_parser(buffer,(size_t) totalBytesRcvd);
+  
+  for (ssize_t i = 0; i < totalBytesRcvd; i++)
+  {
+    printf("0x%x\n",buffer[i]);
+  }
+  printf("bytes: %d\n",totalBytesRcvd);
+
+
+  free(query);
+  return myentry;
+}
+
+int main(){
+
+  struct http_response * myentry = getIpbyName("cloudflare.com");
+  
+  
+  printf("code: %d\n", myentry->status_code);
+  printf("ipv4qty: %d\n", myentry->ipv4_qty);
+
+  for (size_t i = 0; i < myentry->ipv4_qty ; i++)
+  {
+    for (size_t k = 0; k < IP_4_BYTES; k++)
+    {
+    printf("%d.",myentry->ipv4_addr[i].byte[k]);
+    }
+   printf("\n"); 
+  }
+  printf("ipv6qty: %d\n", myentry->ipv6_qty);
+
+
+  
+  free(myentry);
+
+  return 0;
 }
