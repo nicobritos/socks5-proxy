@@ -630,13 +630,7 @@ static void log_close(const struct selector_key *key) {
 static void on_hello_method(struct hello_parser *p, const uint8_t method) {
     uint8_t *selected = p->data;
 
-    // Prioritize Username and password authentication method
-    if (*selected == SOCKS_HELLO_METHOD_USERNAME_PASSWORD)
-        return;
-
     if (method == SOCKS_HELLO_METHOD_USERNAME_PASSWORD)
-        *selected = method;
-    if (method == SOCKS_HELLO_METHOD_NO_AUTHENTICATION_REQUIRED)
         *selected = method;
 }
 

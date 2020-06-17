@@ -1,41 +1,30 @@
+/**
+ * Los logs antes corrian en un thread aparte (un thread por log)
+ * para evitar bloquear si se estan escribiendo muchos logs.
+ * Pero se requiere que el server sea monolitico.
+ * No hay otra forma de implementar un non-blocking write a un file.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <pthread.h>
 #include <stdarg.h>
-#include <semaphore.h>
+#include <time.h>
 #include <string.h>
 
 #include "log_helper.h"
-
-#define MAX_LOG_COUNT 500
 
 #define DEBUG_STR "DEBUG"
 #define INFO_STR "INFO"
 #define WARNING_STR "WARNING"
 #define ERROR_STR "ERROR"
 
-typedef struct log_node_CDT *log_node_t;
-
 typedef struct log_CDT {
     FILE *file;
     char *filename;
     enum log_severity severity;
-    log_node_t first;
-    log_node_t last;
-    uint64_t count;
-
-    pthread_t thread;
-    sem_t semaphore;
-    pthread_mutex_t mutex;
-    bool done;
 } log_CDT;
-
-typedef struct log_node_CDT {
-    char *s;
-    log_node_t next;
-} log_node_CDT;
 
 static log_t system_log;
 
@@ -53,18 +42,6 @@ static bool should_append_(log_t log, enum log_severity severity);
  * @param s
  */
 static void append_to_log_s(log_t log, char *s);
-
-/**
- * Esta es la funcion loop de cada thread. Estan manejadas por un semaforo de cada log
- * @return NULL
- */
-static void *thread_loop_(void *l);
-
-/**
- * Remueve el primer elemento de la cola usando el mutex
- * @param log
- */
-static void remove_first_(log_t log);
 
 /**
  * Devuelve la representacion en str de un severity
@@ -106,28 +83,6 @@ log_t init_log(const char *filename, enum log_severity severity) {
     }
 
     log->severity = severity;
-
-    if (sem_init(&log->semaphore, 0, 0) != 0) {
-        free(log->filename);
-        fclose(log->file);
-        free(log);
-        return NULL;
-    }
-    if (pthread_mutex_init(&log->mutex, NULL) != 0) {
-        free(log->filename);
-        fclose(log->file);
-        sem_destroy(&log->semaphore);
-        free(log);
-        return NULL;
-    }
-    if (pthread_create(&log->thread, NULL, thread_loop_, log) != 0) {
-        free(log->filename);
-        fclose(log->file);
-        pthread_mutex_destroy(&log->mutex);
-        sem_destroy(&log->semaphore);
-        free(log);
-        return NULL;
-    }
     return log;
 }
 
@@ -174,6 +129,8 @@ void append_to_log(log_t log, enum log_severity severity, const char *s, int arg
     free(out); // No lo vamos a usar
 
     append_to_log_s(log, out2);
+
+    free(out2);
 }
 
 /**
@@ -181,26 +138,9 @@ void append_to_log(log_t log, enum log_severity severity, const char *s, int arg
  * @param log
  */
 void close_log(log_t log) {
-    if (log->done) return;
-
-    log->done = true;
-
-    sem_post(&log->semaphore);
-    /** Esperamos a que se escriba todo lo que hay para escribir */
-    pthread_join(log->thread, NULL);
-
-    log_node_t aux, node = log->first;
-    while (node != NULL) {
-        aux = node->next;
-        free(node->s);
-        free(node);
-        node = aux;
-    }
-
+    if (log == NULL) return;
     free(log->filename);
     fclose(log->file);
-    pthread_mutex_destroy(&log->mutex);
-    sem_destroy(&log->semaphore);
     free(log);
 }
 
@@ -221,19 +161,6 @@ void close_system_log() {
  */
 static bool should_append_(log_t log, enum log_severity severity) {
     if (log->severity > severity) return false;
-    if (log->count >= MAX_LOG_COUNT) {
-        if (log != system_log && system_log->severity >= log_severity_warning) {
-            append_to_log(
-                    system_log,
-                    log_severity_warning,
-                    "Could not append to log with filename: '%s' reason: Queue maxed out",
-                    1,
-                    log->filename
-            );
-        }
-
-        return false;
-    }
     return true;
 }
 
@@ -244,57 +171,8 @@ static bool should_append_(log_t log, enum log_severity severity) {
  * @param s
  */
 static void append_to_log_s(log_t log, char *s) {
-    log_node_t node = malloc(sizeof(*node));
-    if (node == NULL) return;
-    node->next = NULL;
-    node->s = s;
-
-    pthread_mutex_lock(&log->mutex);
-
-    if (log->last != NULL) log->last->next = node;
-    if (log->first == NULL) log->first = node;
-    log->count++;
-    sem_post(&log->semaphore);
-
-    pthread_mutex_unlock(&log->mutex);
-}
-
-/**
- * Esta es la funcion loop de cada thread. Estan manejadas por un semaforo de cada log
- */
-static void *thread_loop_(void *l) {
-    log_t log = (log_t) l;
-    while (!log->done) {
-        sem_wait(&log->semaphore);
-
-        if (log->count > 0) {
-            fputs(log->first->s, log->file);
-            fflush(log->file);
-
-            pthread_mutex_lock(&log->mutex);
-            remove_first_(log);
-            pthread_mutex_unlock(&log->mutex);
-        }
-    }
-
-    return NULL;
-}
-
-/**
- * Remueve el primer elemento de la cola
- * @param log
- */
-static void remove_first_(log_t log) {
-    if (log->first != NULL) {
-        free(log->first->s);
-        log_node_t aux = log->first;
-        log->first = log->first->next;
-        if (log->last == aux) {
-            log->last = NULL;
-        }
-        free(aux);
-        log->count--;
-    }
+    fputs(s, log->file);
+    fflush(log->file);
 }
 
 /**

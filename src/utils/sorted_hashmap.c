@@ -209,12 +209,14 @@ void sorted_hashmap_remove(sorted_hashmap_t hashmap, sorted_hashmap_node node) {
  * @param hashmap
  */
 void sorted_hashmap_free(sorted_hashmap_t hashmap) {
-    if (hashmap == NULL || hashmap->freer == NULL) return;
+    if (hashmap == NULL) return;
     uint64_t index = 0;
     while (index < hashmap->overflow_nodes_length) {
         sorted_hashmap_free_starting_node_(hashmap, hashmap->overflow_nodes[index]);
         index++;
     }
+    free(hashmap->overflow_nodes);
+    free(hashmap);
 }
 
 /**
@@ -226,7 +228,7 @@ static void sorted_hashmap_free_starting_node_(sorted_hashmap_t hashmap, sorted_
     sorted_hashmap_node next_node;
     do {
         next_node = node->next;
-        hashmap->freer(node->element);
+        if (hashmap->freer != NULL) hashmap->freer(node->element);
         free(node);
     } while (next_node != NULL);
 }
