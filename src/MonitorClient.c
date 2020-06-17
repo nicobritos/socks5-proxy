@@ -25,16 +25,46 @@
 #define CONCURRENT_CONNECTIOS 2
 #define BYTES_TRANSFERRED 3
 #define PTC_UNSPEC 0
-
+#define CONFIGURATION_MENU 1
+#define METRIC_MENU 2
 static int sd = -1, rc;
 static char *address = "127.0.0.1";
 static uint16_t port = 9090;
 static struct addrinfo hints, *res;
 static bool logged = false;
+static char buffer[MAX_BUFFER];
+static char *username;
+static char *password;
+
+
+static bool authenticate_user(const char *username, const char *password);
+
+static void login();
+
+static void start_connection(int argc, char *argv[]);
+
+static void check_command_line(int argc, char *argv[]);
+
+static void get_address_information();
+
+static void establish_connection();
+
+static void get_metric(int metric);
+
+static void get_menu_option();
+
+static void get_metrics_menu();
+
+static void finish_connection();
+
+static uint16_t parse_port(const char *s);
 
 
 
-
+/* TODO 
+    -get_menu_option
+    -finish_connection
+*/
 int main(int argc, char* argv[]){
 
     /* Initialize conection */
@@ -44,34 +74,85 @@ int main(int argc, char* argv[]){
     while(1){
 
         /* Request user to log in */
-        if(!logged)
+        if(!logged){
             login();
-
-        /* show the menu options to the logged user */
-        print_menu();
-
-        /* execute if valid the option chosen by user */
-        get_menu_option();
+        } 
+        else{
+            /* show the menu options to the logged user */
+            get_menu_option();
+        }
     }
 
     /* Free resources */
     finish_connection();
 }
 
+/* TODO
+    -definir datagrama
+    -cargar el datagrama con usuario y password minimo
+    -parsear respuesta para ver si valido el usuario o no
+*/
+static bool authenticate_user(const char *username, const char *password){
+    //DEFINIR EL FORMATO DEL DATAGRAMA A ENVIAR
+    uint8_t datagram[256]
+    int datagramLength = 1;
+    int ret;
+
+    /* Send request to the server */
+    ret = sctp_sendmsg (connSock, (void *) datagram, (size_t) datagramLength,NULL, 0, 0, 0, 0, 0, 0);
+
+    if(ret == -1){
+        //ERROR
+    }
+
+    uint8_t answer[256];
+    
+    /* Receive the answer from the server */
+    ret = sctp_recvmsg (connSock, (void* ) answer, sizeof (buffer),(struct sockaddr *) NULL, 0,0,0);
+
+    if(ret == -1){
+        //ERROR
+    }
+
+    //PARSEAR LA RESPUESTA
+}
+
 static void login(){
     char username[MAX_BUFFER];
     char password[MAX_BUFFER];
+    
     printf("Hello! To access the menu, first log in\n");
-    while(fgets(buffer,sizeof(buffer),stdin) == NULL){
-        printf("Username: ")
-        
+
+    printf("Username: \n");
+    while(fgets(buffer, sizeof(buffer), stdin) == NULL){
+        printf("Username: \n");
+    }
+    
+    buffer[strcspn(buffer, "\r\n")] = 0;
+    sscanf(buffer, "%s", username);
+
+    int chances = 3;
+    print("Password: \n");
+    while(chances > 0 && !logged){
+        if(fgets(buffer, sizeof(buffer), stdin) != NULL){
+            buffer[strcspn(buffer, "\r\n")] = 0;
+            sscanf(buffer, "%s", password);
+            logged = authenticate_user(username,password);
+        } else{
+            print("Password: \n");
+            chances--;
+        }
     }
 
-
-
+    if(!logged){
+        print("Check if the username and password entered are correct\n");
+        return
+    }
 }
 
-
+/* TODO
+    -CREO hello al servidor
+*/
 static void start_connection(int argc, char *argv[]){
 
     /* Check if new config was sent via CL */
@@ -83,10 +164,10 @@ static void start_connection(int argc, char *argv[]){
     /* Establish connection with server */
     establish_connection();
 
-    //Creo que me esta faltando un HELLO al SERVER
+    //CREO QUE ESTA FALTANDO UN HELLO AL SERVIDOR
 }
 
-static uint16_t port(const char *s) {
+static uint16_t parse_port(const char *s) {
      char *end     = 0;
      const long sl = strtol(s, &end, 10);
 
@@ -100,8 +181,11 @@ static uint16_t port(const char *s) {
      return (uint16_t)sl;
 }
 
+/* TODO
+    -Ver si hay mas opciones por validar
+*/
 static void check_command_line(int argc, char *argv[]){
-    //validar caso de pasarle EOF
+    //VALIDAR EL CASO DE EOF o ^D
     int optchar;
     while((c = getopt(argc, argv, ":L:P:")) != -1){
         switch(optchar){
@@ -111,7 +195,7 @@ static void check_command_line(int argc, char *argv[]){
                 memcpy(address, optarg, optarg_size);
                 break;
             case 'P':
-                port = port(optarg);
+                port = parse_port(optarg);
                 break;
             case ':':
                 fprintf(stderr, "Missing argument after -%c\n",optopt);
@@ -173,11 +257,72 @@ static void establish_connection(){
     }
 }
 
-static void get_metrics(){
-    printf("Show number of: \n")
+/* TODO
+    -Definir el dartagrama para enviar la solicitud
+    -Parsear la respuesta para devolverle la metrica al usuario
+*/
+static void get_metric(int metric){
+    //DEFINIR EL FORMATO DEL DATAGRAMA A ENVIAR
+    uint8_t datagram[256]
+    int datagramLength = 1;
+    int ret;
+
+    /* Send request to the server */
+    ret = sctp_sendmsg (connSock, (void *) datagram, (size_t) datagramLength,NULL, 0, 0, 0, 0, 0, 0);
+
+    if(ret == -1){
+        //ERROR
+    }
+
+    uint8_t answer[256];
+    
+    /* Receive the answer from the server */
+    ret = sctp_recvmsg (connSock, (void* ) answer, sizeof (buffer),(struct sockaddr *) NULL, 0,0,0);
+
+    if(ret == -1){
+        //ERROR
+    }
+
+    //PARSEAR LA RESPUESTA
+}
+
+/* TODO
+    -definit get_configuration_menu
+*/
+static void get_menu_option(){
+    printf("\nMenu options:\n");
+    printf("[1] Configurations\n");
+    printf("[2] Metrics\n");
+
+    if(fgets(buffer,sizeof(buffer),stdin) == NULL){
+        fprintf(stderr,"Please, choose an option.\n");
+         return;
+    }
+
+    char *ptr;
+    long ret;
+
+    ret = strtoul(buffer,&ptr,10);
+
+    switch(ret){
+        case 1:
+            get_configuration_menu(CONFIGURATION_MENU);
+            break;
+        case 2:
+            get_metrics_menu(METRIC_MENU);
+            break;
+        default:
+            printf("Error: Invalid option: %lu \n Please try again with a valid option.",ret);
+        break;
+    }
+}
+
+static void get_metrics_menu(){
+    printf("\nShow number of: \n")
     printf("[1] Historical connections\n");
     printf("[2] Concurrent connections\n");
-    print("[3] Bytes transferred\n");
+    printf("[3] Bytes transferred\n");
+    printf("[4] Back\n");
 
     if(fgets(buffer, sizeof(buffer), stdin) == NULL){
          fprintf(stderr,"Please, choose an option.\n");
@@ -199,34 +344,17 @@ static void get_metrics(){
         case 3:
             get_metric(BYTES_TRANSFERRED);
             break;
+        case 4: 
+            get_menu_option();
         default:
             printf("Error: Invalid option: %lu \n Please try again with a valid option.",ret);
         break;
     }
 }
 
-static void get_metric(int metric){
-    //definir el formato del datagrama a enviar y largo
-    uint8_t datagram[256]
-    int datagramLength = 1;
-    int ret;
-
-    //mando solicitud
-    ret = sctp_sendmsg (connSock, (void *) datagram, (size_t) datagramLength,NULL, 0, 0, 0, 0, 0, 0);
-
-    if(ret == -1){
-        //ocurrio error
-    }
-
-    uint8_t answer[256];
-    //recibo lo solicitado
-    ret = sctp_recvmsg (connSock, (void* ) answer, sizeof (buffer),(struct sockaddr *) NULL, 0,0,0);
-
-    if(ret == -1){
-        //ocurrio error
-    }
-
-    //parsear respuesta
-
-
+static void finish_connection(){
+    free(address);
+    free(username);
+    free(password);
+    free(res); //DUDANDO -> PORQUE HAY UN FREEADDRINFO()
 }
