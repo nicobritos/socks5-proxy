@@ -16,6 +16,8 @@
 #include <limits.h>
 #include <netinet/sctp.h>
 #include <arpa/inet.h>
+#include <errno.h>
+#include <getopt.h>
 
 #include "include/MonitorClient.h"
 
@@ -30,7 +32,7 @@
 static int sd = -1, rc;
 static char *address = "127.0.0.1";
 static uint16_t port = 9090;
-static struct addrinfo hints, *res;
+static struct addrinfo *res;
 static bool logged = false;
 static char buffer[MAX_BUFFER];
 static char *username;
@@ -124,7 +126,7 @@ static bool authenticate_user(const char *username, const char *password){
     int ret;
 
     /* Send request to the server */
-    ret = sctp_sendmsg (connSock, (void *) datagram, (size_t) datalen,NULL, 0, 0, 0, 0, 0, 0);
+    ret = sctp_sendmsg (sd, (void *) datagram, (size_t) datalen,NULL, 0, 0, 0, 0, 0, 0);
 
     if(ret == -1){
         //ERROR
@@ -133,7 +135,7 @@ static bool authenticate_user(const char *username, const char *password){
     uint8_t answer[DATGRAM_MAXLENGTH];
     
     /* Receive the answer from the server */
-    ret = sctp_recvmsg (connSock, (void* ) answer, sizeof (buffer),(struct sockaddr *) NULL, 0,0,0);
+    ret = sctp_recvmsg (sd, (void* ) answer, sizeof (buffer),(struct sockaddr *) NULL, 0,0,0);
 
     if(ret == -1){
         //ERROR
@@ -167,25 +169,25 @@ static void login(){
     }
 
     int chances = 3;
-    print("Password: \n");
+    printf("Password: \n");
     while(chances > 0 && !logged){
         if(fgets(buffer, sizeof(buffer), stdin) != NULL){
             buffer[strcspn(buffer, "\r\n")] = 0;
             sscanf(buffer, "%s", password);
-            if(strlen(password <= 255))
+            if(strlen(password) <= 255)
                 logged = authenticate_user(username,password);
             else
-                printf("Password must be shorter")
+                printf("Password must be shorter");
             
         } else{
-            print("Password: \n");
+            printf("Password: \n");
             chances--;
         }
     }
 
     if(!logged){
         printf("Check if the username and password entered are correct\n");
-        return
+        return;
     }
 }
 
@@ -226,12 +228,11 @@ static uint16_t parse_port(const char *s) {
 static void check_command_line(int argc, char *argv[]){
     //VALIDAR EL CASO DE EOF o ^D
     int optchar;
-    while((c = getopt(argc, argv, ":L:P:")) != -1){
+    while((optchar = getopt(argc, argv, ":L:P:")) != -1){
         switch(optchar){
             case 'L':
-                size_t optarg_size = strlen(optarg) + 1;
-                address = malloc(optarg_size);
-                memcpy(address, optarg, optarg_size);
+                address = malloc(strlen(optarg) + 1);
+                memcpy(address, optarg, strlen(optarg) + 1);
                 break;
             case 'P':
                 port = parse_port(optarg);
@@ -243,7 +244,7 @@ static void check_command_line(int argc, char *argv[]){
                 fprintf(stderr,"Unrecognized option -%c\n",optopt);
                 exit(EXIT_FAILURE);
             default:
-                print_opt();
+                //print_opt();
                 exit(EXIT_FAILURE);
         }
     }
@@ -252,17 +253,17 @@ static void check_command_line(int argc, char *argv[]){
 static void get_address_information(){
     
     /* This structure can be used to provide hints concerning the type of socket that the caller supports or wishes to use. */
+    struct addrinfo hints = {
+        .ai_flags = AI_PASSIVE,                /* Returned socket address structure is intended for use in a call to bind(2) */
+        .ai_family = PF_UNSPEC,                /* Caller accept IPv4 or IPv6 */
+        .ai_socktype = SOCK_STREAM,    
+        .ai_protocol = PTC_UNSPEC,                /* Caller will accept any protocol */
+        .ai_addr = NULL,
+        .ai_canonname = NULL,
+        .ai_next = NULL, 
+    };
 
-    hints.ai_flags = AI_PASSIVE;                /* Returned socket address structure is intended for use in a call to bind(2) */
-    hints.ai_family = PF_UNSPEC;                /* Caller accept IPv4 or IPv6 */
-    hints.ai_socktype = SOCK_STREAM;    
-    hints.protocol = PTC_UNSPEC;                /* Caller will accept any protocol */
-    hints.ai_addrlen = NULL;
-    hints.ai_addr = NULL;
-    hints.ai_canonname = NULL;
-    hints.ai_next = NULL; 
     
-
     char port_str[15];
     snprintf(port_str, sizeof(port_str), "%hu", port);
 
@@ -291,7 +292,7 @@ static void establish_connection(){
     /* Establish connection through the socket */
     rc = connect(sd, res->ai_addr, res->ai_addrlen);
     if(rc == -1){
-        fprintf(stderr, "Error establishing connection with the server via socket");
+        fprintf(stderr, "Error establishing connection with the server via socket\n");
         exit(EXIT_FAILURE);
     }
 }
@@ -302,12 +303,12 @@ static void establish_connection(){
 */
 static void get_metric(int metric){
     //DEFINIR EL FORMATO DEL DATAGRAMA A ENVIAR
-    uint8_t datagram[256]
+    uint8_t datagram[256];
     int datagramLength = 1;
     int ret;
 
     /* Send request to the server */
-    ret = sctp_sendmsg (connSock, (void *) datagram, (size_t) datagramLength,NULL, 0, 0, 0, 0, 0, 0);
+    ret = sctp_sendmsg (sd, (void *) datagram, (size_t) datagramLength,NULL, 0, 0, 0, 0, 0, 0);
 
     if(ret == -1){
         //ERROR
@@ -316,7 +317,7 @@ static void get_metric(int metric){
     uint8_t answer[256];
     
     /* Receive the answer from the server */
-    ret = sctp_recvmsg (connSock, (void* ) answer, sizeof (buffer),(struct sockaddr *) NULL, 0,0,0);
+    ret = sctp_recvmsg (sd, (void* ) answer, sizeof (buffer),(struct sockaddr *) NULL, 0,0,0);
 
     if(ret == -1){
         //ERROR
@@ -345,7 +346,7 @@ static void get_menu_option(){
 
     switch(ret){
         case 1:
-            get_configuration_menu(CONFIGURATION_MENU);
+            // get_configuration_menu(CONFIGURATION_MENU);
             break;
         case 2:
             get_metrics_menu(METRIC_MENU);
@@ -357,7 +358,7 @@ static void get_menu_option(){
 }
 
 static void get_metrics_menu(){
-    printf("\nShow number of: \n")
+    printf("\nShow number of: \n");
     printf("[1] Historical connections\n");
     printf("[2] Concurrent connections\n");
     printf("[3] Bytes transferred\n");
