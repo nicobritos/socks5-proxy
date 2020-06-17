@@ -10,7 +10,7 @@
 #include "http_response_parser.h"
 #include "doh.h"
 
-uint8_t * buffer[BUFSIZE];
+uint8_t buffer[BUFSIZE];
 
 
 // socket online for testing (sacado de Echoclient non bloquing campus)
@@ -39,14 +39,14 @@ ssize_t send_query(uint8_t * query, size_t req_len){
   ssize_t numBytes = send(sock, query, req_len, 0);
   if (numBytes < 0)
     DieWithSystemMessage("send() failed");
-  else if (numBytes != req_len)
+  else if (numBytes != (ssize_t)req_len)
     DieWithUserMessage("send()", "sent unexpected number of bytes");
 
   // Receive the same string back from the server
   ssize_t totalBytesRcvd = 0; // Count of total bytes received
   fputs("Received: ", stdout);     // Setup to prsize_t the echoed string
   
-  while (totalBytesRcvd < req_len) {
+  while (totalBytesRcvd < (ssize_t) req_len) {
     /* Receive up to the buffer size (minus 1 to leave space for
      a null terminator) bytes from the sender */
     numBytes = recv(sock, buffer, BUFSIZE - 1, 0);
@@ -70,7 +70,7 @@ int main(){
     {
         printf("0x%x ",myrequest[i]);
     }
-    printf("\ntotal bytes: %d\n", bytes);
+    printf("\ntotal bytes: %ld\n", bytes);
         for (ssize_t i = 0; i < bytes; i++)
     {
         printf("%c",myrequest[i]);
@@ -84,16 +84,16 @@ int main(){
     printf("code: %d\n", answer->status_code);
     printf("ipv4qty: %d\n", answer->ipv4_qty);
 
-    for (size_t i = 0; i < answer->ipv4_qty ; i++){
-        for (size_t k = 0; k < IP_4_BYTES; k++){
+    for (int i = 0; i < answer->ipv4_qty ; i++){
+        for (int k = 0; k < IP_4_BYTES; k++){
             printf("%d.",answer->ipv4_addr[i].byte[k]);
                 }
    printf("\n"); 
   }
 
   printf("ipv6qty: %d\n", answer->ipv6_qty);
-      for (size_t i = 0; i < answer->ipv6_qty ; i++){
-        for (size_t k = 0; k < IP_6_BYTES; k++){
+      for (int i = 0; i < answer->ipv6_qty ; i++){
+        for (int k = 0; k < IP_6_BYTES; k++){
             printf("%04hx",answer->ipv6_addr[i].byte[k]);
             if(k%2==0){
                 printf(":");
@@ -102,5 +102,7 @@ int main(){
    printf("\n"); 
   }
     
-
+    free(myrequest);
+    free_http_response(answer);
+return 0;
 }

@@ -16,6 +16,8 @@
 #define IPV4_VER 0
 #define IPV6_VER 1
 #define REQ_MAXSIZE 1024
+#define MAXSTRINGLENGTH 128
+#define BUFSIZE 2048
 
 
 
