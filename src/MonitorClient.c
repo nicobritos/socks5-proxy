@@ -11,7 +11,9 @@
 #include <stdbool.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <netdb.h>
 #include <netinet/in.h>
+#include <limits.h>
 #include <netinet/sctp.h>
 #include <arpa/inet.h>
 
@@ -22,54 +24,153 @@
 #define HISTORICAL_CONNECTION 1
 #define CONCURRENT_CONNECTIOS 2
 #define BYTES_TRANSFERRED 3
+#define PTC_UNSPEC 0
 
-static int connSock;
+static int sd = -1, rc;
+static char *address = "127.0.0.1";
+static uint16_t port = 9090;
+static struct addrinfo hints, *res;
+static bool logged = false;
+
+
 
 
 int main(int argc, char* argv[]){
 
+    /* Initialize conection */
     start_connection(argc,argv);
 
+    /* Already connected to the server */
     while(1){
 
-        //loggear al usuario
+        /* Request user to log in */
+        if(!logged)
+            login();
 
-        get_metrics();
+        /* show the menu options to the logged user */
+        print_menu();
 
+        /* execute if valid the option chosen by user */
+        get_menu_option();
     }
+
+    /* Free resources */
+    finish_connection();
+}
+
+static void login(){
+    char username[MAX_BUFFER];
+    char password[MAX_BUFFER];
+    printf("Hello! To access the menu, first log in\n");
+    while(fgets(buffer,sizeof(buffer),stdin) == NULL){
+        printf("Username: ")
+        
+    }
+
+
 
 }
 
-static void start_connection(int argc, char* argv[]){
 
-    connSock = socket (AF_UNSPEC, SOCK_STREAM, IPPROTO_SCTP); //estoy usando IPV4
-    if(connSock == -1){
-        //No se pudo crear el socket
-        printf("Socket creation failed\n");
-        perror("socket()");
-        exit(1);
+static void start_connection(int argc, char *argv[]){
+
+    /* Check if new config was sent via CL */
+    check_command_line(argc,argv);
+
+    /* Use setted config to get server info */
+    get_address_information();
+        
+    /* Establish connection with server */
+    establish_connection();
+
+    //Creo que me esta faltando un HELLO al SERVER
+}
+
+static uint16_t port(const char *s) {
+     char *end     = 0;
+     const long sl = strtol(s, &end, 10);
+
+     if (end == s|| '\0' != *end
+        || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)
+        || sl < 0 || sl > USHRT_MAX) {
+         fprintf(stderr, "port should in in the range of 1-65536: %s\n", s);
+         exit(EXIT_FAILURE);
+         return EXIT_FAILURE;
+     }
+     return (uint16_t)sl;
+}
+
+static void check_command_line(int argc, char *argv[]){
+    //validar caso de pasarle EOF
+    int optchar;
+    while((c = getopt(argc, argv, ":L:P:")) != -1){
+        switch(optchar){
+            case 'L':
+                size_t optarg_size = strlen(optarg) + 1;
+                address = malloc(optarg_size);
+                memcpy(address, optarg, optarg_size);
+                break;
+            case 'P':
+                port = port(optarg);
+                break;
+            case ':':
+                fprintf(stderr, "Missing argument after -%c\n",optopt);
+                exit(EXIT_FAILURE);
+            case '?':
+                fprintf(stderr,"Unrecognized option -%c\n",optopt);
+                exit(EXIT_FAILURE);
+            default:
+                print_opt();
+                exit(EXIT_FAILURE);
+        }
+    }
+}
+
+static void get_address_information(){
+    
+    /* This structure can be used to provide hints concerning the type of socket that the caller supports or wishes to use. */
+
+    hints.ai_flags = AI_PASSIVE;                /* Returned socket address structure is intended for use in a call to bind(2) */
+    hints.ai_family = PF_UNSPEC;                /* Caller accept IPv4 or IPv6 */
+    hints.ai_socktype = SOCK_STREAM;    
+    hints.protocol = PTC_UNSPEC;                /* Caller will accept any protocol */
+    hints.ai_addrlen = NULL;
+    hints.ai_addr = NULL;
+    hints.ai_canonname = NULL;
+    hints.ai_next = NULL; 
+    
+
+    char port_str[15];
+    snprintf(port_str, sizeof(port_str), "%hu", port);
+
+    /********************************************************************/
+    /* Get the address information for the server using getaddrinfo().  */
+    /********************************************************************/
+
+    int gai = getaddrinfo(address, port_str, &hints, &res);
+    if(gai != 0){
+        fprintf("Host not found: %s\n", gai_strerror(rc));
+        exit(EXIT_FAILURE);
     }
 
-    bzero((void *) &servaddr, sizeof (servaddr));
+    /* res has now server valid information */
+}
 
-    servaddr.sin_family = PF_INET; //estoy usando IPV4
-    servaddr.sin_port = htons(MY_PORT_NUM); //
-    servaddr.sin_addr.s_addr = inet_addr ("127.0.0.1");
-
-
-    int ret = connect (connSock, (struct sockaddr *) &servaddr, sizeof (servaddr));
-
-    if (ret == -1)
-    {
-        //No se pudo establecer la conexion
-        printf("Connection failed\n");
-        perror("connect()");
-        close(connSock);
-        exit(1);
+static void establish_connection(){
+    
+    /* Creat socket to the server */
+    sd = socket(res->ai_family, res->ai_socktype, IPPROTO_SCTP);
+    if(sd == -1){
+        fprintf(stderr,"Error creating socket with the server using %s:%hu\n",address,port);
+        exit(EXIT_FAILURE);
     }
 
-    //deberia enviar hello????
-
+    /* Establish connection through the socket */
+    rc = connect(sd, res->ai_addr, res->ai_addrlen);
+    if(rc == -1){
+        fprintf(stderr, "Error establishing connection with the server via socket");
+        exit(EXIT_FAILURE);
+    }
 }
 
 static void get_metrics(){
@@ -99,7 +200,7 @@ static void get_metrics(){
             get_metric(BYTES_TRANSFERRED);
             break;
         default:
-        printf("Error: Invalid option: %lu \n Please try again with a valid option.",ret);
+            printf("Error: Invalid option: %lu \n Please try again with a valid option.",ret);
         break;
     }
 }
