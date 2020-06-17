@@ -31,7 +31,7 @@
 #define METRIC_MENU 2
 static int sd = -1, rc;
 static char *address = "127.0.0.1";
-static uint16_t port = 9090;
+static uint16_t port = 62324;
 static struct addrinfo *res;
 static bool logged = false;
 static char buffer[MAX_BUFFER];
@@ -120,7 +120,7 @@ static bool authenticate_user(const char *username, const char *password){
 
     /* Load password into datagram */
     for(int i=0 ; i<plen ; i++){
-        datagram[3+ulen+i] = (uint8_t)password[i];
+        datagram[4+ulen+i] = (uint8_t)password[i];
     }
      
     int ret;
@@ -144,45 +144,37 @@ static bool authenticate_user(const char *username, const char *password){
     if(answer[1] == 0x00){
         return true;
     }
-
     return false;
 
     //PARSEAR LA RESPUESTA
 }
+
 
 static void login(){
     char username[MAX_BUFFER];
     char password[MAX_BUFFER];
     
     printf("Hello! To access the menu, first log in\n");
-
-  do{
-      printf("Username: ");
-  } while(fgets(buffer, sizeof(buffer), stdin) == NULL);
-
-    buffer[strcspn(buffer, "\r\n")] = 0;
-    sscanf(buffer, "%s", username);
+  
+    printf("Username: ");
+    if(fgets(buffer, sizeof(buffer), stdin) != NULL){
+        buffer[strcspn(buffer, "\r\n")] = 0;
+        sscanf(buffer, "%s", username);
+    }
 
     if(strlen(username) > 255){
         printf("Username must be shorter");
         return;
     }
-
-    int chances = 3;
-    printf("Password: \n");
-    while(chances > 0 && !logged){
-        if(fgets(buffer, sizeof(buffer), stdin) != NULL){
-            buffer[strcspn(buffer, "\r\n")] = 0;
-            sscanf(buffer, "%s", password);
-            if(strlen(password) <= 255)
-                logged = authenticate_user(username,password);
-            else
-                printf("Password must be shorter");
-            
-        } else{
-            printf("Password: \n");
-            chances--;
-        }
+    
+    printf("Password: ");
+    if(fgets(buffer, sizeof(buffer), stdin) != NULL){
+        buffer[strcspn(buffer, "\r\n")] = 0;
+        sscanf(buffer, "%s", password);
+        if(strlen(password) <= 255)
+            logged = authenticate_user(username,password);
+        else
+            printf("Password must be shorter");
     }
 
     if(!logged){
