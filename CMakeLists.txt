@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.1)
 project(PC-2020A-6-TPE.SOCKSV5)
 
 set(CMAKE_C STANDARD 11)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic -Wall -Wextra -Werror -std=c11 -Wno-unused-parameter -D_GNU_SOURCE")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic -Wall -Wextra -Werror -std=c11 -Wno-unused-parameter -fsanitize=address -g -D_GNU_SOURCE")
 set(SOURCE_FILES
         src/utils/buffer.c
         src/utils/netutils.c
