@@ -93,19 +93,44 @@ int main(int argc, char* argv[]){
     -parsear respuesta para ver si valido el usuario o no
 */
 static bool authenticate_user(const char *username, const char *password){
-    //DEFINIR EL FORMATO DEL DATAGRAMA A ENVIAR
-    uint8_t datagram[256]
-    int datagramLength = 1;
+    
+    /* Set datagram for request server authentication */
+    const int DATGRAM_MAXLENGTH = (3 + 2*255);
+    uint8_t datagram[DATGRAM_MAXLENGTH];
+    uint8_t ver = 0x01;
+    uint8_t ulen = (uint8_t)strlen(username);
+    uint8_t plen = (uint8_t)strlen(password);
+    int datalen = 3 + ulen + plen;
+
+    /* Load version into datagram */
+    datagram[0] = ver;
+
+    /* Load ulen into datagram */
+    datagram[1] = ulen;
+
+    /* Load username into datagram */
+    for(int i=0 ; i<ulen ; i++){
+        datagram[2+i] = (uint8_t)username[i];
+    }
+
+    /* Load plen into datagram */
+    datagram[2+ulen] = plen;
+
+    /* Load password into datagram */
+    for(int i=0 ; i<plen ; i++){
+        datagram[3+ulen+i] = (uint8_t)password[i];
+    }
+     
     int ret;
 
     /* Send request to the server */
-    ret = sctp_sendmsg (connSock, (void *) datagram, (size_t) datagramLength,NULL, 0, 0, 0, 0, 0, 0);
+    ret = sctp_sendmsg (connSock, (void *) datagram, (size_t) datalen,NULL, 0, 0, 0, 0, 0, 0);
 
     if(ret == -1){
         //ERROR
     }
 
-    uint8_t answer[256];
+    uint8_t answer[DATGRAM_MAXLENGTH];
     
     /* Receive the answer from the server */
     ret = sctp_recvmsg (connSock, (void* ) answer, sizeof (buffer),(struct sockaddr *) NULL, 0,0,0);
@@ -113,6 +138,12 @@ static bool authenticate_user(const char *username, const char *password){
     if(ret == -1){
         //ERROR
     }
+
+    if(answer[1] == 0x00){
+        return true;
+    }
+
+    return false;
 
     //PARSEAR LA RESPUESTA
 }
@@ -123,13 +154,17 @@ static void login(){
     
     printf("Hello! To access the menu, first log in\n");
 
-    printf("Username: \n");
-    while(fgets(buffer, sizeof(buffer), stdin) == NULL){
-        printf("Username: \n");
-    }
-    
+  do{
+      printf("Username: ");
+  } while(fgets(buffer, sizeof(buffer), stdin) == NULL);
+
     buffer[strcspn(buffer, "\r\n")] = 0;
     sscanf(buffer, "%s", username);
+
+    if(strlen(username) > 255){
+        printf("Username must be shorter");
+        return;
+    }
 
     int chances = 3;
     print("Password: \n");
@@ -137,7 +172,11 @@ static void login(){
         if(fgets(buffer, sizeof(buffer), stdin) != NULL){
             buffer[strcspn(buffer, "\r\n")] = 0;
             sscanf(buffer, "%s", password);
-            logged = authenticate_user(username,password);
+            if(strlen(password <= 255))
+                logged = authenticate_user(username,password);
+            else
+                printf("Password must be shorter")
+            
         } else{
             print("Password: \n");
             chances--;
@@ -145,7 +184,7 @@ static void login(){
     }
 
     if(!logged){
-        print("Check if the username and password entered are correct\n");
+        printf("Check if the username and password entered are correct\n");
         return
     }
 }
