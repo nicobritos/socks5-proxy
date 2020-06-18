@@ -98,7 +98,7 @@ enum request_state request_parser_feed(struct request_parser *p, uint8_t b) {
                         if (b == 0)
                             return p->_state = request_error_invalid_domain_address;
 
-                        p->request->domain_name = malloc(b * sizeof(*p->request->domain_name));
+                        p->request->domain_name = calloc(b + 1, sizeof(*p->request->domain_name));
                         if (p->request->domain_name == NULL)
                             return p->_state = request_error_no_memory;
 
@@ -219,7 +219,7 @@ const char *request_parser_str(const struct request_parser *p) {
 void request_parser_close(struct request_parser *p) {
     if (p->request->address_type == REQUEST_ATYP_DOMAIN_NAME) {
         if (p->request->domain_name != NULL) {
-            free(p->request->domain_name);
+//            free(p->request->domain_name);
         }
     }
 }

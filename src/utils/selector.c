@@ -495,7 +495,7 @@ handle_block_notifications(fd_selector s) {
             item->handler->handle_block(&key);
         }
 
-        free(j);
+//        free(j);
     }
     s->resolution_jobs = 0;
     pthread_mutex_unlock(&s->resolution_mutex);

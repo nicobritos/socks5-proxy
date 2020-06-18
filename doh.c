@@ -3,7 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include "http_response_parser.h"
+#include "src/http_response_parser.h"
 #include "doh.h"
 
 /*
@@ -63,8 +63,6 @@ uint8_t dns_header[] = {0x0d, 0x0a, 0x0d, 0x0a, 0x00, 0x00, 0x01, 0x00, 0x00, 0x
 uint8_t dns_end_ipv4[] = {0x00, 0x01, 0x00, 0x01};
 uint8_t dns_end_ipv6[] = {0x00, 0x1c, 0x00, 0x01};
 
-uint8_t buffer[BUFSIZE];
-
 
 // FUNCIONES LOCALES
 static size_t bincopy(uint8_t * target, uint8_t * source, size_t from, size_t n){
@@ -83,7 +81,6 @@ static uint8_t * encodeName(size_t * size, uint8_t * name){
     size_t name_len = strlen((char *) name);
     uint8_t aux[name_len + 1];
     strcpy((char *) aux,(char *) name);
-
 
     uint8_t qname[MAXSTRINGLENGTH][MAXSTRINGLENGTH];
     size_t j = 0;

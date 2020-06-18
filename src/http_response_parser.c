@@ -9,7 +9,7 @@
 /* Funciones auxiliares */
 void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length);
 struct http_response * add_char_to_code_description(struct http_response * ans, char c, size_t * code_description_current_length);
-struct http_response * error(struct http_response * ans, error_t error_type);
+struct http_response * error(struct http_response * ans, http_response_parser_error_t error_type);
 
 // definiciÃ³n de maquina
 
@@ -818,7 +818,7 @@ struct http_response * add_char_to_code_description(struct http_response * ans, 
     return ans;
 }
 
-struct http_response * error(struct http_response * ans, error_t error_type){
+struct http_response * error(struct http_response * ans, http_response_parser_error_t error_type){
     free_http_response(ans);
     ans = calloc(1, sizeof(*ans));
     ans->status_code = error_type;

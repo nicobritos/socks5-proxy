@@ -17,6 +17,9 @@ set(SOURCE_FILES
         src/utils/sorted_hashmap.c
         src/utils/log_helper.c
         src/utils/byte_formatter.c
+        doh.c
+        src/http_response_parser.c
+        src/parser.c
 )
 
 add_executable(PC-2020A-6-TPE.SOCKSV5 src/main.c ${SOURCE_FILES})

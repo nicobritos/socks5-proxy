@@ -21,6 +21,8 @@
 #include "socks5nio.h"
 #include "../utils/log_helper.h"
 #include "../utils/byte_formatter.h"
+#include "../../doh.h"
+#include "../http_response_parser.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 /** obtiene el struct (socks5 *) desde la llave de selección  */
@@ -212,7 +214,7 @@ struct socks5 {
     int client_fd;
 
     /** res de la direccion del server */
-    struct addrinfo *origin_resolution;
+    struct http_response *origin_resolution;
     struct sockaddr_storage server_addr;
     socklen_t server_addr_len;
     int origin_domain;
@@ -481,8 +483,8 @@ static void socks5_destroy(struct socks5 *s) {
 /** realmente destruye */
 static void socks5_destroy_(struct socks5 *s) {
     if (s->origin_resolution != NULL) {
-        freeaddrinfo(s->origin_resolution);
-        s->origin_resolution = 0;
+        free_http_response(s->origin_resolution);
+        s->origin_resolution = NULL;
     }
     free(s);
 }
@@ -1114,19 +1116,69 @@ static void *request_resolve_blocking(void *data) {
 
     pthread_detach(pthread_self());
     s->origin_resolution = NULL;
-    struct addrinfo hints = {
-            .ai_family = AF_UNSPEC, // IPv4 OR IPv6
-            .ai_socktype = SOCK_STREAM, // Datagram socket
-            .ai_flags = AI_PASSIVE, // Wildcard IP Address
-            .ai_protocol = 0,
-            .ai_canonname = NULL,
-            .ai_addr = NULL,
-            .ai_next = NULL
-    };
+//    struct addrinfo hints = {
+//            .ai_family = AF_UNSPEC, // IPv4 OR IPv6
+//            .ai_socktype = SOCK_STREAM, // Datagram socket
+//            .ai_flags = AI_PASSIVE, // Wildcard IP Address
+//            .ai_protocol = 0,
+//            .ai_canonname = NULL,
+//            .ai_addr = NULL,
+//            .ai_next = NULL
+//    };
 
-    char buffer[7];
-    snprintf(buffer, sizeof(buffer), "%d", ntohs(s->client.request.request.port));
-    getaddrinfo(s->client.request.request.domain_name, buffer, &hints, &s->origin_resolution);
+//    char buffer[7];
+//    snprintf(buffer, sizeof(buffer), "%d", ntohs(s->client.request.request.port));
+//    getaddrinfo(s->client.request.request.domain_name, buffer, &hints, &s->origin_resolution);
+
+    uint8_t dns_buffer[BUFSIZE];
+    ssize_t len;
+    uint8_t *request = getRequest(&len, (uint8_t*)s->client.request.request.domain_name, IPV4_VER, (uint8_t *) "localhost");
+
+    ssize_t sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sock < 0) {
+        abort(); // TODO
+    }
+
+    struct sockaddr_in servAddr;            // Server address
+    memset(&servAddr, 0, sizeof(servAddr)); // Zero out structure
+    servAddr.sin_family = AF_INET;          // IPv4 address family
+    // Convert address
+    inet_pton(AF_INET, DNS_SERVER_IP, &servAddr.sin_addr.s_addr);
+    servAddr.sin_port = htons(DNS_SERVER_PORT);    // Server port
+
+    // Establish the connection to the echo server
+    if (connect(sock, (struct sockaddr *) &servAddr, sizeof(servAddr)) < 0) {
+        abort(); //TODO
+    }
+
+    // Send the string to the server
+    ssize_t numBytes = send(sock, request, len, 0);
+    if (numBytes < 0)
+        abort(); //TODO
+    else if (numBytes != (ssize_t)len)
+        abort(); //TODO
+
+    // Receive the same string back from the server
+    ssize_t totalBytesRcvd = 0; // Count of total bytes received
+    fputs("Received: ", stdout);     // Setup to prsize_t the echoed string
+
+    while (totalBytesRcvd < len) {
+        /* Receive up to the buffer size (minus 1 to leave space for
+         a null terminator) bytes from the sender */
+        numBytes = recv(sock, dns_buffer, BUFSIZE - 1, 0);
+        if (numBytes < 0)
+            abort(); //TODO
+        else if (numBytes == 0)
+            abort(); //TODO
+        totalBytesRcvd += numBytes; // Keep tally of total bytes
+    }
+    close(sock);
+
+    s->origin_resolution = http_response_parser(dns_buffer, totalBytesRcvd);
+    if (s->origin_resolution->status_code != 200) {
+//        abort(); // TODO
+    }
+
     selector_notify_block(key->s, key->fd);
     free(data);
     return NULL;
@@ -1139,11 +1191,27 @@ static unsigned request_resolve_done(struct selector_key *key) {
 
     if (s->origin_resolution == NULL) {
         d->status = socks_status_general_SOCKS_server_failure;
-    } else {
-        s->origin_domain = s->origin_resolution->ai_family;
-        s->server_addr_len = s->origin_resolution->ai_addrlen;
-        memcpy(&s->server_addr, s->origin_resolution->ai_addr, s->origin_resolution->ai_addrlen);
-        freeaddrinfo(s->origin_resolution);
+    } else if (s->origin_resolution->ipv4_qty > 0) {
+        s->origin_domain = AF_INET;
+        s->server_addr_len = sizeof(s->server_addr);
+        s->server_addr.ss_family = AF_INET;
+
+        int8_t address_i = 0;
+        uint8_t i = 0;
+        uint32_t ip = 0;
+        uint8_t *ip_pointer = (uint8_t*)&ip;
+        while (address_i < 4) {
+            ip_pointer[i++] = s->origin_resolution->ipv4_addr[0].byte[address_i];
+            address_i++;
+        }
+//        uint8_t i = 0;
+//        while (i < 4) {
+//            ip |= ((uint32_t)s->origin_resolution->ipv4_addr[0].byte[i] << 8u * (3u - i)) & (0xFF << 8u * (3u - i));
+//            i++;
+//        }
+        ((struct sockaddr_in*) &s->server_addr)->sin_addr.s_addr = ip;
+        ((struct sockaddr_in*) &s->server_addr)->sin_port = htons(d->request.port);
+//        freeaddrinfo(s->origin_resolution);
         s->origin_resolution = NULL;
     }
 

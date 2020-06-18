@@ -21,7 +21,7 @@
 typedef enum errors{
     INVALID_INPUT_FORMAT_ERROR,  // Si el string de entrada no estaba en algun formato vÃ¡lido de respuesta HTTP (1.1)
     REALLOC_ERROR,               // Si al hacer un realloc se produjo algun error
-}error_t;
+}http_response_parser_error_t;
 
 typedef struct {
   uint8_t byte[IP_6_BYTES]; // en orden inverso
