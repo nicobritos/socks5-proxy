@@ -7,8 +7,8 @@
  *
  * Permite extraer de una respuesta HTTP :
  *      1. El codigo de estado HTTP de la respuesta
- *      2. La descripción del codigo de la respuesta
- *      3. Los bytes en la sección del cuerpo de la respuesta (si la hubiere)
+ *      2. La descripciÃ³n del codigo de la respuesta
+ *      3. Los bytes en la secciÃ³n del cuerpo de la respuesta (si la hubiere)
  */
 #include <stdint.h>
 #include <stddef.h>
@@ -19,7 +19,7 @@
 
 
 typedef enum errors{
-    INVALID_INPUT_FORMAT_ERROR,  // Si el string de entrada no estaba en algun formato válido de respuesta HTTP (1.1)
+    INVALID_INPUT_FORMAT_ERROR,  // Si el string de entrada no estaba en algun formato vÃ¡lido de respuesta HTTP (1.1)
     REALLOC_ERROR,               // Si al hacer un realloc se produjo algun error
 }error_t;
 
@@ -48,7 +48,7 @@ struct http_response {
  * En caso de que haya algun error, se devuelve en status_code el error correspondiente del enum "errors" 
  * y el resto de los campos en NULL.
  * 
- * Se debe hacer un free_http_response del puntero devuelto cuando no se use más.
+ * Se debe hacer un free_http_response del puntero devuelto cuando no se use mÃ¡s.
  */
 struct http_response * http_response_parser(uint8_t * bytes, size_t bytes_qty);
 

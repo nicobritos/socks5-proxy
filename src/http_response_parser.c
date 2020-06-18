@@ -11,7 +11,7 @@ void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length);
 struct http_response * add_char_to_code_description(struct http_response * ans, char c, size_t * code_description_current_length);
 struct http_response * error(struct http_response * ans, error_t error_type);
 
-// definición de maquina
+// definiciÃ³n de maquina
 
 enum states {
     ST_START,
@@ -711,8 +711,8 @@ struct http_response * http_response_parser(uint8_t * s, size_t s_length){
     int ttl_length = 0;
     int current_ip_byte = 0;
     size_t code_description_current_length = 0;
-    for(int i = 0; i < s_length; i++){
-        struct parser_event* ret = parser_feed(parser, s[i]);
+    for(size_t i = 0; i < s_length; i++){
+        const struct parser_event* ret = parser_feed(parser, s[i]);
         switch (ret->type){
             case COPY_STATUS_1:
                 ans->status_code = ((ret->data[0]) - '0') * 100;

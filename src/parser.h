@@ -2,12 +2,12 @@
 #define PARSER_H_00180a6350a1fbe79f133adf0a96eb6685c242b6
 
 /**
- * parser.c -- pequeño motor para parsers/lexers.
+ * parser.c -- pequeÃ±o motor para parsers/lexers.
  *
  * El usuario describe estados y transiciones.
- * Las transiciones contienen una condición, un estado destino y acciones.
+ * Las transiciones contienen una condiciÃ³n, un estado destino y acciones.
  *
- * El usuario provee al parser con bytes y éste retona eventos que pueden
+ * El usuario provee al parser con bytes y Ã©ste retona eventos que pueden
  * servir para delimitar tokens o accionar directamente.
  */
 #include <stdint.h>
@@ -15,7 +15,7 @@
 
 /**
  * Evento que retorna el parser.
- * Cada tipo de evento tendrá sus reglas en relación a data.
+ * Cada tipo de evento tendrÃ¡ sus reglas en relaciÃ³n a data.
  */
 struct parser_event {
     /** tipo de evento */
@@ -29,28 +29,28 @@ struct parser_event {
     struct parser_event *next;
 };
 
-/** describe una transición entre estados  */
+/** describe una transiciÃ³n entre estados  */
 struct parser_state_transition {
-    /* condición: un caracter o una clase de caracter. Por ej: '\r' */
+    /* condiciÃ³n: un caracter o una clase de caracter. Por ej: '\r' */
     int       when;
-    /** descriptor del estado destino cuando se cumple la condición */
+    /** descriptor del estado destino cuando se cumple la condiciÃ³n */
     unsigned  dest;
-    /** acción 1 que se ejecuta cuando la condición es verdadera. requerida. */
+    /** acciÃ³n 1 que se ejecuta cuando la condiciÃ³n es verdadera. requerida. */
     void    (*act1)(struct parser_event *ret, const uint8_t c);
-    /** otra acción opcional */
+    /** otra acciÃ³n opcional */
     void    (*act2)(struct parser_event *ret, const uint8_t c);
 };
 
 /** predicado para utilizar en `when' que retorna siempre true */
 static const unsigned ANY = 1 << 9;
 
-/** declaración completa de una máquina de estados */
+/** declaraciÃ³n completa de una mÃ¡quina de estados */
 struct parser_definition {
     /** cantidad de estados */
     const unsigned                         states_count;
     /** por cada estado, sus transiciones */
     const struct parser_state_transition **states;
-    /** cantidad de estados por transición */
+    /** cantidad de estados por transiciÃ³n */
     const size_t                          *states_n;
 
     /** estado inicial */
@@ -60,7 +60,7 @@ struct parser_definition {
 /**
  * inicializa el parser.
  *
- * `classes`: caracterización de cada caracter (256 elementos)
+ * `classes`: caracterizaciÃ³n de cada caracter (256 elementos)
  */
 struct parser *
 parser_init    (const unsigned *classes,
