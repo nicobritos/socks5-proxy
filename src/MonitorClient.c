@@ -74,7 +74,6 @@ int main(int argc, char* argv[]){
 
     /* Already connected to the server */
     while(1){
-
         /* Request user to log in */
         if(!logged){
             login();
@@ -219,9 +218,9 @@ static uint16_t parse_port(const char *s) {
 */
 static void check_command_line(int argc, char *argv[]){
     //VALIDAR EL CASO DE EOF o ^D
-    int optchar;
-    while((optchar = getopt(argc, argv, ":L:P:")) != -1){
-        switch(optchar){
+    int oc;
+    while((oc = getopt(argc, argv, ":L:P:")) != -1){
+        switch(oc){
             case 'L':
                 address = malloc(strlen(optarg) + 1);
                 memcpy(address, optarg, strlen(optarg) + 1);
@@ -268,7 +267,6 @@ static void get_address_information(){
         fprintf("Host not found: %s\n", gai_strerror(rc));
         exit(EXIT_FAILURE);
     }
-
     /* res has now server valid information */
 }
 
