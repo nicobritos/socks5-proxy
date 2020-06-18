@@ -1,0 +1,14 @@
+HTTP/1.1 200 OK
+Server: nginx/1.17.10 (Ubuntu)
+Date: Fri, 05 Jun 2020 04:36:33 GMT
+Content-Type: application/dns-message
+Content-Length: 48
+Connection: keep-alive
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+Expires: Fri, 05 Jun 2020 04:36:33 GMT
+Cache-Control: private, max-age=45
+X-XSS-Protection: 0
+X-Frame-Options: SAMEORIGIN
+Alt-Svc: h3-27=":443"; ma=2592000,h3-25=":443"; ma=2592000,h3-T050=":443"; ma=2592000,h3-Q050=":443"; ma=2592000,h3-Q049=":443"; ma=2592000,h3-Q048=":443"; ma=2592000,h3-Q046=":443"; ma=2592000,h3-Q043=":443"; ma=2592000,quic=":443"; ma=2592000; v="46,43"
+
+.............www.google.com..............-.....$
