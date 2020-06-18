@@ -1,0 +1,150 @@
+digraph g {
+    rankdir=LR;
+    size= "8.27,11.69";
+
+    node       [shape = circle];
+
+    START                       [label = "START"];
+    UNIMPORTANT_LINE            [label = "UNIMPORTANT_LINE"];
+    USER_U                      [label = "U"];
+    USER_S                      [label = "S"];
+    USER_E                      [label = "E"];
+    USER_R                      [label = "R"];
+    USER_SPACE                  [label = "SPACE"];
+    USERNAME                    [label = "USERNAME"];
+    USERNAME_END                [label = "\\n"];
+    USER_RESPONSE_OK_PLUS       [label = "+"];
+    USER_RESPONSE_ERR           [label = "-"];
+    USER_RESPONSE_OK_O          [label = "O"];
+    USER_RESPONSE_OK_K          [label = "K"];
+    USER_RESPONSE_OK_SPACE      [label = "SPACE"];
+    USER_RESPONSE_OK_END        [label = "\\n"];
+    PASS_P                      [label = "P"];
+    PASS_A                      [label = "A"];
+    PASS_S                      [label = "S"];
+    PASS_S_2                    [label = "S"];
+    PASS_SPACE                  [label = "SPACE"];
+    PASSWORD                    [label = "PASSWORD"];
+    PASSWORD_END                [label = "\\n"];
+    PASS_RESPONSE_OK_PLUS       [label = "+"];
+    PASS_RESPONSE_ERR           [label = "-"];
+    PASS_RESPONSE_OK_O          [label = "O"];
+    FINISHED                    [label = "FINISHED", shape = doublecircle];
+
+    START -> USER_U                                     [label = "'U'"];
+    START -> UNIMPORTANT_LINE                           [label = "ANY"];
+
+    UNIMPORTANT_LINE -> START                           [label = "'\\n'"];
+    UNIMPORTANT_LINE -> UNIMPORTANT_LINE                [label = "ANY"];
+
+    USER_U -> USER_S                                    [label = "'S'"];
+    USER_U -> USER_U                                    [label = "'\\0'"];
+    USER_U -> START                                     [label = "'\\n'"];
+    USER_U -> UNIMPORTANT_LINE                          [label = "ANY"];
+
+    USER_S -> USER_E                                    [label = "'E'"];
+    USER_S -> USER_S                                    [label = "'\\0'"];
+    USER_S -> START                                     [label = "'\\n'"];
+    USER_S -> UNIMPORTANT_LINE                          [label = "ANY"];
+
+    USER_E -> USER_R                                    [label = "'R'"];
+    USER_E -> USER_E                                    [label = "'\\0'"];
+    USER_E -> START                                     [label = "'\\n'"];
+    USER_E -> UNIMPORTANT_LINE                          [label = "ANY"];
+
+    USER_R -> USER_SPACE                                [label = "' '"];
+    USER_R -> USER_R                                    [label = "'\\0'"];
+    USER_R -> START                                     [label = "'\\n'"];
+    USER_R -> UNIMPORTANT_LINE                          [label = "ANY"];
+
+    USER_SPACE -> USER_SPACE                            [label = "'\\0'"];
+    USER_SPACE -> START                                 [label = "'\\n"];
+    USER_SPACE -> USERNAME                              [label = "ANY"];
+
+    USERNAME -> USERNAME                                [label = "'\\0'"];
+    USERNAME -> USERNAME_END                            [label = "'\\n'"];
+    USERNAME -> USERNAME                                [label = "ANY"];
+
+    USERNAME_END -> USERNAME_END                        [label = "'\\0'"];
+    USERNAME_END -> USER_RESPONSE_OK_PLUS               [label = "'+'"];
+    USERNAME_END -> USER_RESPONSE_ERR                   [label = "'-'"];
+    USERNAME_END -> START                               [label = "'\\n'"];
+    USERNAME_END -> UNIMPORTANT_LINE                    [label = "ANY"];
+
+    USER_RESPONSE_ERR -> USER_RESPONSE_ERR              [label = "'\\0'"];
+    USER_RESPONSE_ERR -> START                          [label = "'\\n'"];
+    USER_RESPONSE_ERR -> UNIMPORTANT_LINE               [label = "ANY"];
+
+    USER_RESPONSE_OK_PLUS -> USER_RESPONSE_OK_PLUS      [label = "'\\0'"];
+    USER_RESPONSE_OK_PLUS -> USER_RESPONSE_OK_O         [label = "'O'"];
+    USER_RESPONSE_OK_PLUS -> START                      [label = "'\\n'"];
+    USER_RESPONSE_OK_PLUS -> UNIMPORTANT_LINE           [label = "ANY"];
+
+    USER_RESPONSE_OK_O -> USER_RESPONSE_OK_O            [label = "'\\0'"];
+    USER_RESPONSE_OK_O -> USER_RESPONSE_OK_K            [label = "'K'"];
+    USER_RESPONSE_OK_O -> START                         [label = "'\\n'"];
+    USER_RESPONSE_OK_O -> UNIMPORTANT_LINE              [label = "ANY"];
+
+    USER_RESPONSE_OK_K -> USER_RESPONSE_OK_K            [label = "'\\0'"];
+    USER_RESPONSE_OK_K -> USER_RESPONSE_OK_SPACE        [label = "' '"];
+    USER_RESPONSE_OK_K -> START                         [label = "'\\n'"];
+    USER_RESPONSE_OK_K -> UNIMPORTANT_LINE              [label = "ANY"];
+
+    USER_RESPONSE_OK_SPACE -> USER_RESPONSE_OK_END      [label = "'\\n'"];
+    USER_RESPONSE_OK_SPACE -> USER_RESPONSE_OK_SPACE    [label = "ANY"];
+
+    USER_RESPONSE_OK_END -> USER_RESPONSE_OK_END        [label = "'\\0'"];
+    USER_RESPONSE_OK_END -> PASS_P                      [label = "'P'"];
+    USER_RESPONSE_OK_K -> START                         [label = "'\\n'"];
+    USER_RESPONSE_OK_END -> UNIMPORTANT_LINE            [label = "ANY"];
+
+    PASS_P -> PASS_P                                    [label = "'\\0'"];
+    PASS_P -> PASS_A                                    [label = "'A'"];
+    PASS_P -> START                                     [label = "'\\n'"];
+    PASS_P -> UNIMPORTANT_LINE                          [label = "ANY"];
+
+    PASS_A -> PASS_A                                    [label = "'\\0'"];
+    PASS_A -> PASS_S                                    [label = "'S'"];
+    PASS_A -> START                                     [label = "'\\n'"];
+    PASS_A -> UNIMPORTANT_LINE                          [label = "ANY"];
+
+    PASS_S -> PASS_S                                    [label = "'\\0'"];
+    PASS_S -> PASS_S_2                                  [label = "'S'"];
+    PASS_S -> START                                     [label = "'\\n'"];
+    PASS_S -> UNIMPORTANT_LINE                          [label = "ANY"];
+
+    PASS_S_2 -> PASS_S_2                                [label = "'\\0'"];
+    PASS_S_2 -> PASS_SPACE                              [label = "' '"];
+    PASS_S_2 -> START                                   [label = "'\\n'"];
+    PASS_S_2 -> UNIMPORTANT_LINE                        [label = "ANY"];
+
+    PASS_SPACE -> PASS_SPACE                            [label = "'\\0'"];
+    PASS_SPACE -> START                                 [label = "'\\n'"];
+    PASS_SPACE -> PASSWORD                              [label = "ANY"];
+
+    PASSWORD -> PASSWORD                                [label = "'\\0'"];
+    PASSWORD -> PASSWORD_END                            [label = "'\\n'"];
+    PASSWORD -> PASSWORD                                [label = "ANY"];
+
+    PASSWORD_END -> PASSWORD_END                        [label = "'\\0'"];
+    PASSWORD_END -> PASS_RESPONSE_OK_PLUS               [label = "'+'"];
+    PASSWORD_END -> PASS_RESPONSE_ERR                   [label = "'-'"];
+    PASSWORD_END -> START                               [label = "'\\n'"];
+    PASSWORD_END -> UNIMPORTANT_LINE                    [label = "ANY"];
+
+    PASS_RESPONSE_ERR -> PASS_RESPONSE_ERR              [label = "'\\0'"];
+    PASS_RESPONSE_ERR -> START                          [label = "'\\n'"];
+    PASS_RESPONSE_ERR -> UNIMPORTANT_LINE               [label = "ANY"];
+
+    PASS_RESPONSE_OK_PLUS -> PASS_RESPONSE_OK_PLUS      [label = "'\\0'"];
+    PASS_RESPONSE_OK_PLUS -> PASS_RESPONSE_OK_O         [label = "'O'"];
+    PASS_RESPONSE_OK_PLUS -> START                      [label = "'\\n'"];
+    PASS_RESPONSE_OK_PLUS -> UNIMPORTANT_LINE           [label = "ANY"];
+
+    PASS_RESPONSE_OK_O -> PASS_RESPONSE_OK_O            [label = "'\\0'"];
+    PASS_RESPONSE_OK_O -> FINISHED                      [label = "'K'"];
+    PASS_RESPONSE_OK_O -> START                         [label = "'\\n'"];
+    PASS_RESPONSE_OK_O -> UNIMPORTANT_LINE              [label = "ANY"];
+
+    FINISHED -> FINISHED                                [label = "ANY"];
+}
