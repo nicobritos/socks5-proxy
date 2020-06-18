@@ -22,7 +22,7 @@
 
 
 // Devuelve el request HTTP correspondiete para realizar la consulta de name sobre Doh
-uint8_t * getRequest (ssize_t * len, uint8_t * name, int ip_ver);
+uint8_t * getRequest (ssize_t * len, uint8_t * name, int ip_ver, uint8_t * dns_hostname);
 
 
 #endif // DOH_H_

@@ -65,7 +65,7 @@ ssize_t send_query(uint8_t * query, size_t req_len){
 
 int main(){
     ssize_t bytes = 0;
-    uint8_t * myrequest = getRequest(&bytes,(uint8_t * ) "facebook.com", IPV6_VER);
+    uint8_t * myrequest = getRequest(&bytes,(uint8_t * ) "facebook.com", IPV6_VER,(uint8_t *) "localhost");
     for (ssize_t i = 0; i < bytes; i++)
     {
         printf("0x%x ",myrequest[i]);
