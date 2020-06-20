@@ -37,6 +37,9 @@ static bool logged = false;
 static char buffer[MAX_BUFFER];
 static char *username;
 static char *password;
+struct sctp_sndrcvinfo sndrcvinfo;
+int flags;
+
 
 
 static bool authenticate_user(const char *username, const char *password);
@@ -99,8 +102,8 @@ static bool authenticate_user(const char *username, const char *password){
     const int DATGRAM_MAXLENGTH = (3 + 2*255);
     uint8_t datagram[DATGRAM_MAXLENGTH];
     uint8_t ver = 0x01;
-    uint8_t ulen = (uint8_t)strlen(username);
-    uint8_t plen = (uint8_t)strlen(password);
+    uint8_t ulen = (uint8_t) strlen(username);
+    uint8_t plen = (uint8_t) strlen(password);
     int datalen = 3 + ulen + plen;
 
     /* Load version into datagram */
@@ -111,7 +114,7 @@ static bool authenticate_user(const char *username, const char *password){
 
     /* Load username into datagram */
     for(int i=0 ; i<ulen ; i++){
-        datagram[2+i] = (uint8_t)username[i];
+        datagram[2+i] = (uint8_t) username[i];
     }
 
     /* Load plen into datagram */
@@ -119,7 +122,7 @@ static bool authenticate_user(const char *username, const char *password){
 
     /* Load password into datagram */
     for(int i=0 ; i<plen ; i++){
-        datagram[4+ulen+i] = (uint8_t)password[i];
+        datagram[3+ulen+i] = (uint8_t) password[i];
     }
      
     int ret;
@@ -134,15 +137,19 @@ static bool authenticate_user(const char *username, const char *password){
     uint8_t answer[DATGRAM_MAXLENGTH];
     
     /* Receive the answer from the server */
-    ret = sctp_recvmsg (sd, (void* ) answer, sizeof (buffer),(struct sockaddr *) NULL, 0,0,0);
+    ret = sctp_recvmsg (sd, (void *) answer, sizeof (buffer),(struct sockaddr *) NULL, 0,&sndrcvinfo, &flags);
 
     if(ret == -1){
         //ERROR
     }
+    printf("%d\n",answer[0]);
+    printf("%d\n",answer[1]);
 
-    if(answer[1] == 0x00){
+    if(answer[1] == 0){
+        printf("User Authenticated!!\n");
         return true;
     }
+    printf("User authentication failed\n");
     return false;
 
     //PARSEAR LA RESPUESTA
