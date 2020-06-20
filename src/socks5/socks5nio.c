@@ -620,10 +620,6 @@ static void socksv5_close(struct selector_key *key) {
             free(s->dns.request);
             s->dns.request = NULL;
         }
-        if (s->dns.fd != -1) {
-            close_fd_(s->dns.fd, key);
-            s->dns.fd = -1;
-        }
     }
     socks5_destroy(s);
 }
