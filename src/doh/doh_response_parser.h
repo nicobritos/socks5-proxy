@@ -3,7 +3,7 @@
 
 
 /**
- * http_response_parser.c -- parser de respuestas HTTP.
+ * doh_response_parser_feed.c -- parser de respuestas HTTP.
  *
  * Permite extraer de una respuesta HTTP :
  *      1. El codigo de estado HTTP de la respuesta
@@ -11,6 +11,7 @@
  *      3. Los bytes en la secciÃ³n del cuerpo de la respuesta (si la hubiere)
  */
 #include <stdint.h>
+#include <stdbool.h>
 #include <stddef.h>
 
 #define MAX_ADDR 6
@@ -27,36 +28,42 @@ typedef struct {
   uint8_t byte[IP_6_BYTES]; // en orden inverso
 } ipv6_addr_t;
 
-typedef struct {
-  uint8_t byte[IP_4_BYTES]; // en orden inverso
-} ipv4_addr_t;
-
-
-struct http_response {
+struct doh_response {
     uint16_t status_code;
     char * code_description;
     unsigned int ttl[MAX_ADDR]; // Time To Live (in seconds)
     int ipv4_qty; // Cantidad de ips en el array ipv4_addr
-    ipv4_addr_t ipv4_addr[MAX_ADDR];
+    uint32_t ipv4_addr[MAX_ADDR];
     int ipv6_qty; // Cantidad de ips en el array ipv6_addr
     ipv6_addr_t ipv6_addr[MAX_ADDR];
+
+    /** Parser */
+    struct doh_parser *_doh_parser;
 };
 
+struct doh_response *doh_response_parser_init();
+
 /**
- * Se pasa como argumento la respuesta HTTP completa para que sea parseada y la longitud de dicha respuesta. 
+ * Se pasa como argumento la respuesta HTTP incompleta para que sea parseada y la longitud de dicha respuesta.
  * Devuelve en cada campo de la estructura los campos parseados.
- * En caso de que haya algun error, se devuelve en status_code el error correspondiente del enum "errors" 
+ * En caso de que haya algun error, se devuelve en status_code el error correspondiente del enum "errors"
  * y el resto de los campos en NULL.
- * 
- * Se debe hacer un free_http_response del puntero devuelto cuando no se use mÃ¡s.
+ *
+ * Devuelve true si termino, false sino
  */
-struct http_response * http_response_parser(uint8_t * bytes, size_t bytes_qty);
+bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t * s, size_t s_length);
 
+bool doh_response_parser_is_done(struct doh_response *doh_response);
 
 /**
- * Libera la memoria utilizada por la estructura, si http_response es NULL, no hace nada
+ * Devuelve true si el parser termino por error, false sino
+ */
+bool doh_response_parser_error(struct doh_response *doh_response);
+
+/**
+ * Libera la memoria utilizada por la estructura, si doh_response es NULL, no hace nada
  */ 
-void free_http_response(struct http_response * http_response);
+void doh_response_parser_free(struct doh_response * http_response);
 
 
 #endif

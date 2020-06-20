@@ -23,11 +23,14 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <limits.h>
+#include <arpa/inet.h>
 
 #include "utils/selector.h"
 #include "utils/log_helper.h"
 #include "socks5/socks5nio.h"
 #include "socks5/message/auth_user_pass_helper.h"
+#include "configuration.h"
+#include "doh/doh.h"
 
 #define SYSTEM_LOG_FILENAME "system.log"
 
@@ -39,12 +42,42 @@ sigterm_handler(const int signal) {
     done = true;
 }
 
+static void
+init_configuration() {
+    configuration.doh.domain_name = DNS_SERVER_DOMAIN_NAME;
+    configuration.doh.sockaddr.ss_family = DNS_SERVER_AF;
+    configuration.doh.socklen = sizeof(configuration.doh.sockaddr);
+
+    struct sockaddr_in* in;
+    struct sockaddr_in6* in6;
+
+    switch (configuration.doh.sockaddr.ss_family) {
+        case AF_INET:
+            in = (struct sockaddr_in *) &configuration.doh.sockaddr;
+            in->sin_port = htons(DNS_SERVER_PORT);
+            inet_pton(
+                    AF_INET,
+                    DNS_SERVER_IP,
+                    &in->sin_addr);
+            break;
+        case AF_INET6:
+            in6 = (struct sockaddr_in6 *) &configuration.doh.sockaddr;
+            in6->sin6_port = htons(DNS_SERVER_PORT);
+            inet_pton(
+                    AF_INET6,
+                    DNS_SERVER_IP6,
+                    &in6->sin6_addr);
+            break;
+    }
+}
+
 int
 main(const int argc, const char **argv) {
     log_t system_log = init_system_log(SYSTEM_LOG_FILENAME, LOG_LEVEL);
     if (system_log == NULL) fprintf(stderr, "Couldn't initialize system_log");
     enum auth_user_pass_helper_status auth_status = auth_user_pass_helper_status_error_not_initialized;
     unsigned port = 1080;
+    init_configuration();
 
     if (argc == 1) {
         // utilizamos el default
@@ -78,13 +111,13 @@ main(const int argc, const char **argv) {
     selector_status ss = SELECTOR_SUCCESS;
     fd_selector selector = NULL;
 
-    struct sockaddr_in addr;
+    struct sockaddr_in6 addr;
     memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    addr.sin_port = htons(port);
+    addr.sin6_family = AF_INET6;
+    addr.sin6_addr = in6addr_any;
+    addr.sin6_port = htons(port);
 
-    const int server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    const int server = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
     if (server < 0) {
         err_msg = "Unable to create socket";
         goto finally;
@@ -94,13 +127,15 @@ main(const int argc, const char **argv) {
 
     // man 7 ip. no importa reportar nada si falla.
     setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int) {1}, sizeof(int));
+    // Necesitamos desactivar esto para bindear a IPv4 e IPv6 al mismo tiempo
+    setsockopt(server, IPPROTO_IPV6, IPV6_V6ONLY, &(int) {0}, sizeof(int));
 
     if (bind(server, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
         err_msg = "unable to bind socket";
         goto finally;
     }
 
-    if (listen(server, 20) < 0) {
+    if (listen(server, 1024) < 0) {
         err_msg = "unable to listen";
         goto finally;
     }

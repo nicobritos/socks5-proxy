@@ -21,10 +21,12 @@
 #include "socks5nio.h"
 #include "../utils/log_helper.h"
 #include "../utils/byte_formatter.h"
-#include "../../doh.h"
-#include "../http_response_parser.h"
+#include "../doh/doh.h"
+#include "../doh/doh_response_parser.h"
+#include "../configuration.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
+#define MIN(x, y) (x < y ? x : y)
 /** obtiene el struct (socks5 *) desde la llave de selección  */
 #define ATTACHMENT(key) ( (struct socks5 *)(key)->data)
 #define SOCKS_LOG_FILENAME "socks.log"
@@ -92,22 +94,45 @@ enum socks_v5state {
      *
      * Transiciones:
      *   - REQUEST_READ     mientras el mensaje no este completo
-     *   - REQUEST_RESOLVE  si requiere resolver un nombre DNS
-     *   - REQUEST_CONNECTING si no requiere resolver DNS
+     *   - REQUEST_RESOLVE_CONNECT  si requiere resolver un nombre DNS
+     *   - REQUEST_CONNECT si no requiere resolver DNS
      *   - REQUEST_WRITE  si determinamos que no se puede procesar
      *   - ERROR
      */
     REQUEST_READ,
 
     /**
+     * Aqui nos conectamos al servidor DNS
+     * Intereses:
+     *   - OP_NOOP sobre el client_fd
+     * Transiciones:
+     *   - REQUEST_RESOLVE_WRITE si se pudo conectar
+     *   - REQUEST_WRITE sino (y setea el status)
+     */
+    REQUEST_RESOLVE_CONNECT,
+
+    /**
      * Aqui esperamos la resoluicion DNS
      * Intereses:
-     *   - OP_NOOP sobre el client_fd. Espera un evento que la tarea bloqueante termino
+     *   - OP_NOOP sobre el client_fd
+     *   - OP_WRITE sobre el dns.fd
      * Transiciones:
-     *   - REQUEST_CONNECTING si se pudo resolver
-     *   - REQUEST_WRITE sino
+     *   - REQUEST_RESOLVE_WRITE mientras hayan bytes por escribir
+     *   - REQUEST_RESOLVE_READ sino
+     *   - REQUEST_WRITE si se produjo algun error
      */
-    REQUEST_RESOLVE,
+    REQUEST_RESOLVE_WRITE,
+
+    /**
+     * Aqui esperamos la resoluicion DNS
+     * Intereses:
+     *   - OP_NOOP sobre el client_fd
+     *   - OP_READ sobre el dns.fd
+     * Transiciones:
+     *   - REQUEST_RESOLVE_READ mientras hayan bytes por leer
+     *   - REQUEST_WRITE si ya termino o si se produjo algun error
+     */
+    REQUEST_RESOLVE_READ,
 
     /**
      * Espera a que se establezca la conexion al servidor
@@ -116,7 +141,7 @@ enum socks_v5state {
      * Transiciones:
      *   - REQUEST_WRITE
      */
-    REQUEST_CONNECTING,
+    REQUEST_CONNECT,
 
     /**
      * Envia la respuesta del request al cliente
@@ -214,10 +239,19 @@ struct socks5 {
     int client_fd;
 
     /** res de la direccion del server */
-    struct http_response *origin_resolution;
+    struct {
+        struct doh_response *origin_resolution;
+        uint8_t *response_buffer;
+        char *request;
+        ssize_t request_len;
+        ssize_t write_index;
+        ssize_t read_index;
+        int fd;
+        uint8_t ipv4_index;
+        uint8_t ipv6_index;
+    } dns;
     struct sockaddr_storage server_addr;
     socklen_t server_addr_len;
-    int origin_domain;
     int server_fd;
 
     /** maquinas de estados */
@@ -322,8 +356,14 @@ static unsigned request_write(struct selector_key *key);
 static void log_request(const struct selector_key *key, const struct request_parser *p, enum socks_response_status socks_status);
 
 /** ---------------- REQUEST RESOLVE ---------------- */
-static void *request_resolve_blocking(void *data);
-static unsigned request_resolve_done(struct selector_key *key);
+static enum socks_v5state request_resolve_connect(struct selector_key *key, struct request_st *d);
+static void request_resolve_read_init(unsigned state, struct selector_key *key);
+static unsigned request_resolve_read(struct selector_key *key);
+static void request_resolve_read_close(unsigned state, struct selector_key *key);
+static unsigned request_resolve_connect_write(struct selector_key *key);
+static unsigned request_resolve_write(struct selector_key *key);
+static unsigned request_resolve_process(struct selector_key *key, struct request_st *d);
+static unsigned request_resolve_set_address(struct selector_key *key, struct doh_response *doh);
 
 /** ---------------- REQUEST CONNECTING ---------------- */
 static void request_connecting_init(unsigned state, struct selector_key *key);
@@ -360,10 +400,18 @@ static const struct state_definition client_statbl[] = {
                 .on_departure = request_read_close,
                 .on_read_ready = request_read
         }, {
-                .state = REQUEST_RESOLVE,
-                .on_block_ready = request_resolve_done
+                .state = REQUEST_RESOLVE_CONNECT,
+                .on_write_ready = request_resolve_connect_write // Esto va a escribir en el buffer
         }, {
-                .state = REQUEST_CONNECTING,
+                .state = REQUEST_RESOLVE_WRITE,
+                .on_write_ready = request_resolve_write // Esto va a mandar del buffer
+        }, {
+                .state = REQUEST_RESOLVE_READ,
+                .on_arrival = request_resolve_read_init,
+                .on_read_ready = request_resolve_read,
+                .on_departure = request_resolve_read_close
+        }, {
+                .state = REQUEST_CONNECT,
                 .on_arrival = request_connecting_init,
                 .on_write_ready = request_connecting_write
         }, {
@@ -482,10 +530,10 @@ static void socks5_destroy(struct socks5 *s) {
 
 /** realmente destruye */
 static void socks5_destroy_(struct socks5 *s) {
-    if (s->origin_resolution != NULL) {
-        free_http_response(s->origin_resolution);
-        s->origin_resolution = NULL;
-    }
+//    if (s->origin_resolution != NULL) {
+//        doh_response_parser_free(s->origin_resolution);
+//        s->origin_resolution = NULL;
+//    } TODO
     free(s);
 }
 
@@ -888,7 +936,6 @@ static void request_read_close(const unsigned state, struct selector_key *key) {
 }
 
 static unsigned request_process(struct selector_key *key, struct request_st *d) {
-    struct selector_key *key_copy = NULL;
     struct sockaddr_in *in = NULL;
     struct sockaddr_in6 *in6 = NULL;
 
@@ -898,7 +945,7 @@ static unsigned request_process(struct selector_key *key, struct request_st *d) 
                 case REQUEST_ATYP_IPV4:
                     in = (struct sockaddr_in *) &d->request.dest_addr;
 
-                    ATTACHMENT(key)->origin_domain = AF_INET;
+                    in->sin_family = AF_INET;
                     in->sin_port = htons(d->request.port);
                     ATTACHMENT(key)->server_addr_len = sizeof(d->request.dest_addr);
                     memcpy(&ATTACHMENT(key)->server_addr, &d->request.dest_addr, sizeof(d->request.dest_addr));
@@ -906,29 +953,14 @@ static unsigned request_process(struct selector_key *key, struct request_st *d) 
                 case REQUEST_ATYP_IPV6:
                     in6 = (struct sockaddr_in6 *) &d->request.dest_addr;
 
-                    ATTACHMENT(key)->origin_domain = AF_INET6;
+                    in6->sin6_family = AF_INET6;
                     in6->sin6_port = htons(d->request.port);
                     ATTACHMENT(key)->server_addr_len = sizeof(d->request.dest_addr);
                     memcpy(&ATTACHMENT(key)->server_addr, &d->request.dest_addr, sizeof(d->request.dest_addr));
                     return request_connect(key, d);
                 case REQUEST_ATYP_DOMAIN_NAME:
-                    key_copy = malloc(sizeof(*key));
-                    if (key_copy == NULL) {
-                        d->status = socks_status_general_SOCKS_server_failure;
-                        selector_set_interest_key(key, OP_WRITE);
-                        return REQUEST_WRITE;
-                    } else {
-                        pthread_t thread;
-                        memcpy(key_copy, key, sizeof(*key_copy));
-                        if (pthread_create(&thread, 0, request_resolve_blocking, key_copy) != 0) {
-                            d->status = socks_status_general_SOCKS_server_failure;
-                            selector_set_interest_key(key, OP_WRITE);
-                            return REQUEST_WRITE;
-                        } else {
-                            selector_set_interest_key(key, OP_NOOP);
-                            return REQUEST_RESOLVE;
-                        }
-                    }
+                    selector_set_interest_key(key, OP_NOOP);
+                    return request_resolve_connect(key, d);
                 default:
                     d->status = socks_status_address_type_not_supported;
                     selector_set_interest_key(key, OP_WRITE);
@@ -948,7 +980,7 @@ static unsigned request_connect(struct selector_key *key, struct request_st *d) 
     enum socks_response_status status = d->status;
     int *fd = d->server_fd;
 
-    *fd = socket(ATTACHMENT(key)->origin_domain, SOCK_STREAM, 0);
+    *fd = socket(ATTACHMENT(key)->server_addr.ss_family, SOCK_STREAM, 0);
     if (*fd == -1 || selector_fd_set_nio(*fd) == -1) {
         error = true;
         goto finally;
@@ -986,7 +1018,7 @@ static unsigned request_connect(struct selector_key *key, struct request_st *d) 
 
     d->status = status;
 
-    return REQUEST_CONNECTING;
+    return REQUEST_CONNECT;
 }
 
 static unsigned request_write(struct selector_key *key) {
@@ -1110,114 +1142,246 @@ static void log_request(const struct selector_key *key, const struct request_par
 
 
 /** ---------------- REQUEST RESOLVE ---------------- */
-static void *request_resolve_blocking(void *data) {
-    struct selector_key *key = (struct selector_key*) data;
+static enum socks_v5state request_resolve_connect(struct selector_key *key, struct request_st *d) {
+    bool error = false;
     struct socks5 *s = ATTACHMENT(key);
-
-    pthread_detach(pthread_self());
-    s->origin_resolution = NULL;
-//    struct addrinfo hints = {
-//            .ai_family = AF_UNSPEC, // IPv4 OR IPv6
-//            .ai_socktype = SOCK_STREAM, // Datagram socket
-//            .ai_flags = AI_PASSIVE, // Wildcard IP Address
-//            .ai_protocol = 0,
-//            .ai_canonname = NULL,
-//            .ai_addr = NULL,
-//            .ai_next = NULL
-//    };
-
-//    char buffer[7];
-//    snprintf(buffer, sizeof(buffer), "%d", ntohs(s->client.request.request.port));
-//    getaddrinfo(s->client.request.request.domain_name, buffer, &hints, &s->origin_resolution);
-
-    uint8_t dns_buffer[BUFSIZE];
-    ssize_t len;
-    uint8_t *request = getRequest(&len, (uint8_t*)s->client.request.request.domain_name, IPV4_VER, (uint8_t *) "localhost");
-
-    ssize_t sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (sock < 0) {
-        abort(); // TODO
+    
+    s->dns.fd = socket(configuration.doh.sockaddr.ss_family, SOCK_STREAM, IPPROTO_TCP);
+    if (s->dns.fd < 0 || selector_fd_set_nio(s->dns.fd)) {
+        error = true;
+        d->status = socks_status_general_SOCKS_server_failure;
+        goto finally;
     }
 
-    struct sockaddr_in servAddr;            // Server address
-    memset(&servAddr, 0, sizeof(servAddr)); // Zero out structure
-    servAddr.sin_family = AF_INET;          // IPv4 address family
-    // Convert address
-    inet_pton(AF_INET, DNS_SERVER_IP, &servAddr.sin_addr.s_addr);
-    servAddr.sin_port = htons(DNS_SERVER_PORT);    // Server port
+    if (connect(s->dns.fd, (const struct sockaddr*)&configuration.doh.sockaddr, configuration.doh.socklen) < 0) {
+        if (errno == EINPROGRESS) {
+            /** Nos llega este error porque estamos en async */
+            selector_status st = selector_set_interest_key(key, OP_NOOP);
+            if (st != SELECTOR_SUCCESS) {
+                error = true;
+                goto finally;
+            }
 
-    // Establish the connection to the echo server
-    if (connect(sock, (struct sockaddr *) &servAddr, sizeof(servAddr)) < 0) {
-        abort(); //TODO
+            st = selector_register(key->s, s->dns.fd, &socks5_handler, OP_WRITE, key->data);
+            if (st != SELECTOR_SUCCESS) {
+                error = true;
+                goto finally;
+            }
+            ATTACHMENT(key)->references += 1;
+        } else {
+            d->status = errno_to_socks(errno);
+            error = true;
+        }
+    } else {
+        // Esto no puede pasar
+        abort();
     }
 
-    // Send the string to the server
-    ssize_t numBytes = send(sock, request, len, 0);
-    if (numBytes < 0)
-        abort(); //TODO
-    else if (numBytes != (ssize_t)len)
-        abort(); //TODO
-
-    // Receive the same string back from the server
-    ssize_t totalBytesRcvd = 0; // Count of total bytes received
-    fputs("Received: ", stdout);     // Setup to prsize_t the echoed string
-
-    while (totalBytesRcvd < len) {
-        /* Receive up to the buffer size (minus 1 to leave space for
-         a null terminator) bytes from the sender */
-        numBytes = recv(sock, dns_buffer, BUFSIZE - 1, 0);
-        if (numBytes < 0)
-            abort(); //TODO
-        else if (numBytes == 0)
-            abort(); //TODO
-        totalBytesRcvd += numBytes; // Keep tally of total bytes
-    }
-    close(sock);
-
-    s->origin_resolution = http_response_parser(dns_buffer, totalBytesRcvd);
-    if (s->origin_resolution->status_code != 200) {
-//        abort(); // TODO
+    finally:
+    if (error) {
+        if (s->dns.fd != -1) {
+            close(s->dns.fd);
+            s->dns.fd = -1;
+        }
     }
 
-    selector_notify_block(key->s, key->fd);
-    free(data);
-    return NULL;
+    return REQUEST_RESOLVE_CONNECT;
 }
 
-/** procesa el resultado de la resoluicion de nombres */
-static unsigned request_resolve_done(struct selector_key *key) {
+static unsigned request_resolve_connect_write(struct selector_key *key) {
+    int error;
+    socklen_t len = sizeof(error);
     struct request_st *d = &ATTACHMENT(key)->client.request;
     struct socks5 *s = ATTACHMENT(key);
 
-    if (s->origin_resolution == NULL) {
+    if (getsockopt(key->fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
         d->status = socks_status_general_SOCKS_server_failure;
-    } else if (s->origin_resolution->ipv4_qty > 0) {
-        s->origin_domain = AF_INET;
-        s->server_addr_len = sizeof(s->server_addr);
-        s->server_addr.ss_family = AF_INET;
-
-        int8_t address_i = 0;
-        uint8_t i = 0;
-        uint32_t ip = 0;
-        uint8_t *ip_pointer = (uint8_t*)&ip;
-        while (address_i < 4) {
-            ip_pointer[i++] = s->origin_resolution->ipv4_addr[0].byte[address_i];
-            address_i++;
+    } else {
+        if (error == 0) {
+            d->status = socks_status_succeeded;
+        } else {
+            d->status = errno_to_socks(error);
         }
-//        uint8_t i = 0;
-//        while (i < 4) {
-//            ip |= ((uint32_t)s->origin_resolution->ipv4_addr[0].byte[i] << 8u * (3u - i)) & (0xFF << 8u * (3u - i));
-//            i++;
-//        }
-        ((struct sockaddr_in*) &s->server_addr)->sin_addr.s_addr = ip;
-        ((struct sockaddr_in*) &s->server_addr)->sin_port = htons(d->request.port);
-//        freeaddrinfo(s->origin_resolution);
-        s->origin_resolution = NULL;
     }
 
-    return request_connect(key, d);
+    s->dns.write_index = s->dns.read_index = 0;
+    s->dns.request = getRequest(
+            &s->dns.request_len,
+            s->client.request.request.domain_name,
+            configuration.doh.sockaddr.ss_family,
+            configuration.doh.domain_name);
+
+    s->dns.response_buffer = calloc(DNS_BUFFER_SIZE, sizeof(*s->dns.response_buffer));
+    if (s->dns.response_buffer == NULL) {
+        d->status = socks_status_general_SOCKS_server_failure;
+        error = 1;
+        goto finally;
+    } else {
+        error = 0;
+    }
+
+    selector_status ss = 0;
+    finally:
+    if (error) {
+        ss |= selector_set_interest(key->s, *d->client_fd, OP_WRITE);
+        ss |= selector_set_interest(key->s, s->dns.fd, OP_NOOP);
+        return ss == SELECTOR_SUCCESS ? REQUEST_WRITE : ERROR;
+    } else {
+        ss |= selector_set_interest(key->s, *d->client_fd, OP_NOOP);
+        ss |= selector_set_interest(key->s, s->dns.fd, OP_WRITE);
+        return ss == SELECTOR_SUCCESS ? REQUEST_RESOLVE_WRITE : ERROR;
+    }
 }
 
+static unsigned request_resolve_write(struct selector_key *key) {
+    struct socks5 *s = ATTACHMENT(key);
+    struct request_st *d = &ATTACHMENT(key)->client.request;
+
+    // Send the string to the server
+    ssize_t n = send(
+            s->dns.fd,
+            s->dns.request + s->dns.write_index,
+            MIN(s->dns.request_len - s->dns.write_index, DNS_BUFFER_SIZE - 1),
+            MSG_NOSIGNAL);
+    if (n < 0) {
+        d->status = socks_status_general_SOCKS_server_failure;
+        selector_set_interest(key->s, s->dns.fd, OP_NOOP);
+        selector_set_interest(key->s, *d->client_fd, OP_WRITE);
+        return REQUEST_WRITE;
+    } else {
+        s->dns.write_index += n;
+        if (s->dns.write_index == s->dns.request_len) {
+            selector_set_interest(key->s, s->dns.fd, OP_READ);
+            return REQUEST_RESOLVE_READ;
+        }
+    }
+
+    return REQUEST_RESOLVE_WRITE;
+}
+
+static void request_resolve_read_init(const unsigned state, struct selector_key *key) {
+    struct socks5 *s = ATTACHMENT(key);
+    struct request_st *d = &ATTACHMENT(key)->client.request;
+
+    s->dns.origin_resolution = doh_response_parser_init();
+    if (s->dns.origin_resolution == NULL) {
+        d->status = socks_status_general_SOCKS_server_failure;
+        abort();
+    }
+}
+
+/** procesa el resultado de la resoluicion de nombres */
+static unsigned request_resolve_read(struct selector_key *key) {
+    struct socks5 *s = ATTACHMENT(key);
+    struct request_st *d = &ATTACHMENT(key)->client.request;
+
+    // Receive the (same) string from the server
+    ssize_t n = recv(
+            s->dns.fd,
+            s->dns.response_buffer + s->dns.read_index,
+            DNS_BUFFER_SIZE - 1 - s->dns.read_index,
+            0);
+
+    if (n < 0) {
+        d->status = socks_status_general_SOCKS_server_failure;
+        selector_set_interest(key->s, s->dns.fd, OP_NOOP);
+        selector_set_interest(key->s, *d->client_fd, OP_WRITE);
+        return REQUEST_WRITE;
+    } else {
+        doh_response_parser_feed(
+                s->dns.origin_resolution,
+                s->dns.response_buffer + s->dns.read_index,
+                n);
+
+        s->dns.read_index += n;
+        if (doh_response_parser_is_done(s->dns.origin_resolution)) {
+            selector_set_interest(key->s, s->dns.fd, OP_NOOP);
+            return request_resolve_process(key, d);
+        }
+    }
+
+    return REQUEST_RESOLVE_READ;
+}
+
+static unsigned request_resolve_process(struct selector_key *key, struct request_st *d) {
+    struct socks5 *s = ATTACHMENT(key);
+    bool error = false;
+
+    if (s->dns.origin_resolution->status_code != 200) {
+        printf("ERRRO");
+//        abort(); // TODO
+    }
+
+    selector_status ss = 0;
+//    finally:
+    if (error) {
+        if (s->dns.response_buffer != NULL) {
+            free(s->dns.response_buffer);
+            s->dns.response_buffer = NULL;
+        }
+        if (s->dns.fd != -1) {
+//            close(s->dns.fd);
+            s->dns.fd = -1;
+        }
+
+        ss |= selector_set_interest(key->s, *d->client_fd, OP_WRITE);
+        ss |= selector_set_interest(key->s, s->dns.fd, OP_NOOP);
+        return ss == SELECTOR_SUCCESS ? REQUEST_WRITE : ERROR;
+    } else {
+        ss |= selector_set_interest(key->s, s->dns.fd, OP_NOOP);
+        return ss == SELECTOR_SUCCESS ? request_resolve_set_address(key, s->dns.origin_resolution) : ERROR;
+    }
+}
+
+static unsigned request_resolve_set_address(struct selector_key *key, struct doh_response *doh) {
+    struct socks5 *s = ATTACHMENT(key);
+    struct request_st *d = &s->client.request;
+
+    if (s->dns.ipv4_index < doh->ipv4_qty) {
+        struct sockaddr_in *in = (struct sockaddr_in*) &s->server_addr;
+
+        if (s->dns.ipv4_index == 0) {
+            s->server_addr_len = sizeof(s->server_addr);
+            s->server_addr.ss_family = AF_INET;
+            in->sin_port = htons(d->request.port);
+        }
+        in->sin_addr.s_addr = htonl(doh->ipv4_addr[s->dns.ipv4_index]);
+        s->dns.ipv4_index++;
+
+        return request_connect(key, d);
+    } else if (s->dns.ipv6_index < doh->ipv6_qty) {
+        struct sockaddr_in6 *in6 = (struct sockaddr_in6*) &s->server_addr;
+
+        if (s->dns.ipv6_index == 0) {
+            s->server_addr_len = sizeof(s->server_addr);
+            s->server_addr.ss_family = AF_INET6;
+            in6->sin6_port = htons(d->request.port);
+        }
+
+        int8_t address_i = 0;
+        while (address_i < IP_6_BYTES) {
+            in6->sin6_addr.s6_addr[address_i] = doh->ipv6_addr[s->dns.ipv6_index].byte[address_i];
+            address_i++;
+        }
+        s->dns.ipv6_index++;
+
+        return request_connect(key, d);
+    } else {
+        // ERROR
+        selector_status ss = 0;
+        d->status = socks_status_host_unreachable;
+        ss |= selector_set_interest(key->s, s->client_fd, OP_WRITE);
+        return ss == SELECTOR_SUCCESS ? REQUEST_WRITE : ERROR;
+    }
+}
+
+static void request_resolve_read_close(const unsigned state, struct selector_key *key) {
+    struct socks5 *s = ATTACHMENT(key);
+    if (s->dns.origin_resolution != NULL) {
+        doh_response_parser_free(s->dns.origin_resolution);
+        s->dns.origin_resolution = NULL;
+    }
+}
 
 /** ---------------- REQUEST CONNECTING ---------------- */
 static void request_connecting_init(const unsigned state, struct selector_key *key) {

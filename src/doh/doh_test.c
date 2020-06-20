@@ -6,8 +6,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include "Practical.h"
-#include "src/http_response_parser.h"
+#include "../../Practical.h"
+#include "doh_response_parser.h"
 #include "doh.h"
 
 uint8_t buffer[BUFSIZE];
