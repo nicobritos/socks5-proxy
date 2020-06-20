@@ -620,6 +620,11 @@ static void socksv5_close(struct selector_key *key) {
             free(s->dns.request);
             s->dns.request = NULL;
         }
+        // TODO
+//        if (s->dns.fd != -1 && s->dns.fd != key->fd) {
+//            close_fd_(s->dns.fd, key);
+//            s->dns.fd = -1;
+//        }
     }
     socks5_destroy(s);
 }
@@ -1299,7 +1304,7 @@ static unsigned request_resolve_read(struct selector_key *key) {
             DNS_BUFFER_SIZE - 1 - s->dns.read_index,
             0);
 
-    if (n < 0) {
+    if (n <= 0) {
         d->status = socks_status_general_SOCKS_server_failure;
         selector_set_interest(key->s, s->dns.fd, OP_NOOP);
         selector_set_interest(key->s, *d->client_fd, OP_WRITE);
@@ -1312,8 +1317,15 @@ static unsigned request_resolve_read(struct selector_key *key) {
 
         s->dns.read_index += n;
         if (doh_response_parser_is_done(s->dns.origin_resolution)) {
-            selector_set_interest(key->s, s->dns.fd, OP_NOOP);
-            return request_resolve_process(key, d);
+            if (doh_response_parser_error(s->dns.origin_resolution)) {
+                d->status = socks_status_general_SOCKS_server_failure;
+                selector_set_interest(key->s, s->dns.fd, OP_NOOP);
+                selector_set_interest(key->s, *d->client_fd, OP_WRITE);
+                return REQUEST_WRITE;
+            } else {
+                selector_set_interest(key->s, s->dns.fd, OP_NOOP);
+                return request_resolve_process(key, d);
+            }
         }
     }
 
