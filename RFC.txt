@@ -23,63 +23,226 @@ Configure and Monitor for SOCKS V5 Server
    The server verifies the supplied UNAME and PASSWD, and sends the
    following response:
 
-                        +----+--------+
-                        |VER | STATUS |
-                        +----+--------+
-                        | 1  |   1    |
-                        +----+--------+
+                        +--------+----------+
+                        | STATUS |  MESSAGE |
+                        +--------+----------+
+                        |   1    | Variable |
+                        +--------+----------+
 
-   A STATUS field of X'00' indicates success. If the server returns a
-   `failure' (STATUS value other than X'00') status, it MUST close the
-   connection.
+   STATUS is 0 if autentication was succesfully made, or 0 instead
+   MESSAGE is a null terminated string (ASCII). Here the server sends hello or custumized error.  
+
 
 2. Monitor and Configure
 
-    Once logged in the server sends the following metrics:
-        
-        o   ECON - number of establised connections
-        o   ACON - number of actual connections
-        o   BYTES - total bytes transferred
+    COMMANDS
+
+    -GET METRICS - Code 0x01
+
+    					Resquest
+
+                        +--------+
+                        |  CODE  |
+                        +--------+
+                        |   1    |
+                        +--------+
+
+                        Response
 
            +----------+----------+----------+
            |   ECON   |   ACON   |  BYTES   | 
            +----------+----------+----------+
-           |  32 bits |  32 bits |  64 bits |  
+           |  	4	  |     4    |    4     |  
            +----------+----------+----------+
 
-
-        Commands
-                          Request format
-                +----------+----------+----------+
-                |   CODE   |   ARG    |   MODE   | 
-                +----------+----------+----------+
-                |  8 bits  |  32 bits |   1 bit  |  
-                +----------+----------+----------+
+        o   ECON - number of establised connections
+        o   ACON - number of actual connections
+        o   BYTES - total bytes transferred
 
 
+    -GET USERS - Code 0x02
 
-        This server received this request.
-        CODE represents the command code, ARG the argument if it is needed
-        and MODE can be 1 for write and 0 for read. 
+    					Resquest
 
-        o METRICS - CODE 0x01 - send actual value of ECON, ACON and bytes. Refreshed what is sent 
-        and the beggining of the connection
+                        +--------+
+                        |  CODE  |
+                        +--------+
+                        |   1    |
+                        +--------+
 
-        o CREDENTIALS - CODE 0x02 - send sniffed credentials on an string, with the following format:
+                        Response
 
-        [SYS_USER],[PROTOCOL],[SNI_USER],[SNI_PASS]\0
+           +------------+------------+
+           |    USER    |   STATUS   | 
+           +------------+------------+
+           |  Variable  |     1      |  
+           +------------+------------+
 
-        o I/O BUFFER - CODE 0x03
+        o   USER - user name
+        o   STATUS - 1 Indicates that USER is athorized to use the Proxy, 0 that it is not.
 
-        o Doh Server IP - CODE 0x04
+	USER is a null terminated string
+	End of users is indicated by \0\0
+
+	Example
+
+	'Juan\0\1Gianfranco\0\1Nicolas\0\1Ignasio\0\1Agustin\0\1\0\0' 
 
 
-                     Respone format
-                +----------+----------+
-                |   CODE   |   DATA   |
-                +----------+----------+
-                |  8 bits  |  32 bits | 
-                +----------+----------+
+
+	-GET ACCESS LOG - Code 0x03
+
+    					Resquest
+
+                        +--------+
+                        |  CODE  |
+                        +--------+
+                        |   1    |
+                        +--------+
+
+                        Response
+
+         +------------+------------+-------+------------+------------+------------+------------+------------+
+         |    TIME    |    USER    | RTYPE |    OIP     |    OPORT   |    DEST    |    DPORT   |    STATUS  |
+         +------------+------------+-------+------------+------------+------------+------------+------------+
+         |  Variable  |  Variable  |   1   |  Variable  |   Variable |   Variable |   Variable |      1     |
+         +------------+------------+-------+------------+------------+------------+------------+------------+
+
+     	TIME, USER,RTYPE,OIP, OPORT, DEST, DPORT are null terminated strings
+     	RTYPE 'A' is espected
+     	STATUS can be 0 or 1 (see GET USERS)
+     	Each entry is separated with a \0\0
+     	End of entries is indicated by \0\0\0
+
+    	Example
+
+    	'2020-06-15T19:56:34Z\0Juan\0A\0192.168.1.100\09090\0www.itba.edu.ar\080\0\1\0\0
+     	 2020-06-15T19:52:43Z\0JGianfranco\0A\0192.168.1.123\09091\0www.itba.edu.ar\080\0\1\0\0\0'
+
+
+	-GET PASSWORDS - Code 0x04
+
+    					Resquest
+
+                        +--------+
+                        |  CODE  |
+                        +--------+
+                        |   1    |
+                        +--------+
+
+                        Response
+
+         +------------+------------+-------+------------+------------+------------+------------+------------+
+         |    TIME    |    USER    | RTYPE |  PROTOCOL  |    DEST    |    DPORT   |    ULOG    |  PASSWORD  |
+         +------------+------------+-------+------------+------------+------------+------------+------------+
+         |  Variable  |  Variable  |   1   |  Variable  |   Variable |   Variable |   Variable |  Variable  |
+         +------------+------------+-------+------------+------------+------------+------------+------------+
+
+     	TIME, USER,RTYPE,PROTOCOL, DEST,DPORT, ULOG are null terminated strings
+     	USER - Requesting user
+     	ULOG - Logged User
+     	RTYPE 'P' is espected
+     	Each entry is separated with a \0\0
+     	End of entries is indicated by \0\0\0
+
+    Example
+
+    '2020-06-15T19:56:34Z\0Juan\0P\0HTTP\0www.itba.edu.ar\080\0Gianfranco\0\pass\0\0
+     2020-06-15T19:12:12Z\0Juan\0P\0POP3\0www.itba.edu.ar\0110\0Gianfranco\0\pass\0\0\0'
+
+        
+
+
+	-GET VARS - Code 0x05
+
+    					Resquest
+
+                        +--------+
+                        |  CODE  |
+                        +--------+
+                        |   1    |
+                        +--------+
+
+                        Response
+
+           +------------+----------+
+           |    VCODE   |  VVALUE  |
+           +------------+----------+
+           |      1     | Variable |
+           +------------+--- ------+
+
+        o   VCODE - Reference to Var
+        		+ I/0 TIMEOUT - Code 0x01
+        		+ - Code 0x02
+        		+ - Code 0x03
+
+        		(faltan definiar algunas variables mas)
+
+        o   VVALUE - Variable Value as string. It is null terminated
+
+           
+
+
+
+           +------------+-------------------+
+           |    VCODE   |  VLEN |   VVALUE  |
+           +------------+-------------------+
+           |      1     |   1   |  Variable |
+           +------------+-------------------+
+
+        o   VCODE - Reference to Var
+        		+ I/0 TIMEOUT - Code 0x01
+        		+ - Code 0x02
+        		+ - Code 0x03
+        o   VLEN - VVALUE length
+        o   VVALUE - Variable Value
+
+
+
+	USER is a null terminated string
+	End of users is indicated by \0\0
+
+	Example
+
+	'Juan\0\1Gianfranco\0\1Nicolas\0\1Ignasio\0\1Agustin\0\1\0\0'  
+
+
+	-SET USER - Code 0x06
+
+	                Request
+
+           +---------+------------+------------+
+           |   CODE  |    USER    |   MODE     | 
+           +---------+------------+------------+
+           |    1    |  Variable  |     1      |  
+           +---------+------------+------------+
+
+        o   USER - user name
+        o   MODE
+        	+ 0x00 - Disables user to use Proxy
+        	+ 0x01 - Enables user to use Proxy, creates user if it does not exists
+        	+ 0x02 - Removes user
+
+
+    -SET VAR - Code 0x07
+
+	                Request
+
+           +---------+------------+
+           |   CODE  |   VVALUE   | 
+           +---------+------------+
+           |    1    |  Variable  |  
+           +---------+------------+
+
+        o   VVALUE
+        	+ I/0 TIMEOUTS is size_t big endian
+        	
+	 
+
+
+	 
+
+
 
 
 
