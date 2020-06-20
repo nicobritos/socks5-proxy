@@ -1082,9 +1082,9 @@ add_char_to_code_description(struct doh_response *ans, char c, size_t *code_desc
 }
 
 struct doh_response *error(struct doh_response *ans, http_response_parser_error_t error_type) {
-    doh_response_parser_free(ans);
-    ans = calloc(1, sizeof(*ans));
-    ans->status_code = error_type;
+//    doh_response_parser_free(ans);
+//    ans = calloc(1, sizeof(*ans));
+//    ans->status_code = error_type;
     return ans;
 }
 

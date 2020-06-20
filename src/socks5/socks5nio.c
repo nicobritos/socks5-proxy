@@ -349,10 +349,11 @@ static unsigned auth_user_pass_write(struct selector_key *key);
 /** ---------------- REQUEST ---------------- */
 static void request_init(unsigned state, struct selector_key *key);
 static unsigned request_read(struct selector_key *key);
-static void request_read_close(unsigned state, struct selector_key *key);
 static unsigned request_process(struct selector_key *key, struct request_st *d);
 static unsigned request_connect(struct selector_key *key, struct request_st *d);
+static void request_write_init(unsigned state, struct selector_key *key);
 static unsigned request_write(struct selector_key *key);
+static void request_write_close(unsigned state, struct selector_key *key);
 static void log_request(const struct selector_key *key, const struct request_parser *p, enum socks_response_status socks_status);
 
 /** ---------------- REQUEST RESOLVE ---------------- */
@@ -397,7 +398,6 @@ static const struct state_definition client_statbl[] = {
         }, {
                 .state = REQUEST_READ,
                 .on_arrival = request_init,
-                .on_departure = request_read_close,
                 .on_read_ready = request_read
         }, {
                 .state = REQUEST_RESOLVE_CONNECT,
@@ -416,7 +416,9 @@ static const struct state_definition client_statbl[] = {
                 .on_write_ready = request_connecting_write
         }, {
                 .state = REQUEST_WRITE,
-                .on_write_ready = request_write
+                .on_arrival = request_write_init,
+                .on_write_ready = request_write,
+                .on_departure = request_write_close
         }, {
                 .state = COPY,
                 .on_arrival = copy_init,
@@ -594,30 +596,53 @@ static void socksv5_block(struct selector_key *key) {
 }
 
 static void socksv5_close(struct selector_key *key) {
-    if (ATTACHMENT(key)->references == 1) {
-        if (ATTACHMENT(key)->client_fd != -1) {
+    struct socks5 *s = ATTACHMENT(key);
+    
+    if (s->references == 1) {
+        if (s->client_fd != -1) {
             log_close(key);
         }
-        if (ATTACHMENT(key)->credentials.username != NULL) {
-            free(ATTACHMENT(key)->credentials.username);
-            ATTACHMENT(key)->credentials.username = NULL;
+        if (s->credentials.username != NULL) {
+            free(s->credentials.username);
+            s->credentials.username = NULL;
         }
-        if (ATTACHMENT(key)->credentials.password != NULL) {
-            free(ATTACHMENT(key)->credentials.password);
-            ATTACHMENT(key)->credentials.password = NULL;
+        if (s->credentials.password != NULL) {
+            free(s->credentials.password);
+            s->credentials.password = NULL;
+        }
+        if (s->dns.origin_resolution != NULL) {
+            doh_response_parser_free(s->dns.origin_resolution);
+            s->dns.origin_resolution = NULL;
+        }
+        if (s->dns.response_buffer != NULL) {
+            free(s->dns.response_buffer);
+            s->dns.response_buffer = NULL;
+        }
+        if (s->dns.request != NULL) {
+            free(s->dns.request);
+            s->dns.request = NULL;
+        }
+        if (s->dns.fd != -1) {
+            close_fd_(s->dns.fd, key);
+            s->dns.fd = -1;
         }
     }
-    socks5_destroy(ATTACHMENT(key));
+    socks5_destroy(s);
 }
 
 static void socksv5_done(struct selector_key* key) {
     if (ATTACHMENT(key)->client_fd != -1) {
         close_fd_(ATTACHMENT(key)->client_fd, key);
+        ATTACHMENT(key)->client_fd = -1;
     }
     if (ATTACHMENT(key)->server_fd != -1) {
         close_fd_(ATTACHMENT(key)->server_fd, key);
+        ATTACHMENT(key)->server_fd = -1;
     }
-    ATTACHMENT(key)->client_fd = ATTACHMENT(key)->server_fd = -1;
+    if (ATTACHMENT(key)->dns.fd != -1) {
+        close_fd_(ATTACHMENT(key)->dns.fd, key);
+        ATTACHMENT(key)->dns.fd = -1;
+    }
 }
 
 static void close_fd_(int fd, struct selector_key* key) {
@@ -891,7 +916,6 @@ static unsigned auth_user_pass_write(struct selector_key *key) {
     return ret;
 }
 
-
 /** ---------------- REQUEST ---------------- */
 static void request_init(const unsigned state, struct selector_key *key) {
     struct request_st *d = &ATTACHMENT(key)->client.request;
@@ -928,11 +952,6 @@ static unsigned request_read(struct selector_key *key) {
     }
 
     return error ? ERROR : ret;
-}
-
-static void request_read_close(const unsigned state, struct selector_key *key) {
-    struct request_st *d = &ATTACHMENT(key)->client.request;
-    request_parser_close(&d->parser);
 }
 
 static unsigned request_process(struct selector_key *key, struct request_st *d) {
@@ -1052,6 +1071,10 @@ static unsigned request_write(struct selector_key *key) {
     }
 
     return ret;
+}
+
+static void request_write_close(unsigned state, struct selector_key *key) {
+    request_parser_close(&ATTACHMENT(key)->client.request.parser);
 }
 
 static void log_request(const struct selector_key *key, const struct request_parser *p, enum socks_response_status socks_status) {
@@ -1275,7 +1298,7 @@ static unsigned request_resolve_read(struct selector_key *key) {
     struct socks5 *s = ATTACHMENT(key);
     struct request_st *d = &ATTACHMENT(key)->client.request;
 
-    // Receive the (same) string from the server
+    // Receive response from the server
     ssize_t n = recv(
             s->dns.fd,
             s->dns.response_buffer + s->dns.read_index,
@@ -1305,25 +1328,9 @@ static unsigned request_resolve_read(struct selector_key *key) {
 
 static unsigned request_resolve_process(struct selector_key *key, struct request_st *d) {
     struct socks5 *s = ATTACHMENT(key);
-    bool error = false;
+    selector_status ss = 0;
 
     if (s->dns.origin_resolution->status_code != 200) {
-        printf("ERRRO");
-//        abort(); // TODO
-    }
-
-    selector_status ss = 0;
-//    finally:
-    if (error) {
-        if (s->dns.response_buffer != NULL) {
-            free(s->dns.response_buffer);
-            s->dns.response_buffer = NULL;
-        }
-        if (s->dns.fd != -1) {
-//            close(s->dns.fd);
-            s->dns.fd = -1;
-        }
-
         ss |= selector_set_interest(key->s, *d->client_fd, OP_WRITE);
         ss |= selector_set_interest(key->s, s->dns.fd, OP_NOOP);
         return ss == SELECTOR_SUCCESS ? REQUEST_WRITE : ERROR;
@@ -1380,6 +1387,18 @@ static void request_resolve_read_close(const unsigned state, struct selector_key
     if (s->dns.origin_resolution != NULL) {
         doh_response_parser_free(s->dns.origin_resolution);
         s->dns.origin_resolution = NULL;
+    }
+    if (s->dns.response_buffer != NULL) {
+        free(s->dns.response_buffer);
+        s->dns.response_buffer = NULL;
+    }
+    if (s->dns.request != NULL) {
+        free(s->dns.request);
+        s->dns.request = NULL;
+    }
+    if (s->dns.fd != -1) {
+        close_fd_(s->dns.fd, key);
+        s->dns.fd = -1;
     }
 }
 
