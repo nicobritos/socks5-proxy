@@ -84,22 +84,22 @@ enum states {
     ST_SKIP_12, // query type 2
     ST_SKIP_13, // query class 1
     ST_SKIP_14, // query class 2
-    ST_SKIP_15, // ans name 1,
-    ST_SKIP_16, // ans name 2
+    ST_ANS_1, // ans name 1,
+    ST_ANS_2, // ans name 2
     ST_TYPE_1, // ans type 1
-    ST_TYPE_2, // ans type 2
     ST_SKIP_TYPE_2, // ans type 2
+    ST_TYPE_2, // ans type 2
     ST_SKIP_19, // ans class 1
     ST_SKIP_ANSWER_19, // ans class 1
     ST_SKIP_20, // ans class 2
     ST_SKIP_ANSWER_20, // ans class 2
     ST_TTL_1,
-    ST_SKIP_ANSWER_TTL_1,
     ST_TTL_2,
-    ST_SKIP_ANSWER_TTL_2,
     ST_TTL_3,
-    ST_SKIP_ANSWER_TTL_3,
     ST_TTL_4,
+    ST_SKIP_ANSWER_TTL_1,
+    ST_SKIP_ANSWER_TTL_2,
+    ST_SKIP_ANSWER_TTL_3,
     ST_SKIP_ANSWER_TTL_4,
     ST_DATA_LENGTH_0,
     ST_SKIP_DATA_LENGTH_0,
@@ -272,8 +272,7 @@ invalid_input(struct parser_event *ret, const uint8_t c) {
 static unsigned
 skip_data(void *attachment, const uint8_t c) {
     struct doh_parser *p = attachment;
-    if (p->data_length > 0) return ST_SKIP_DATA_LENGTH_0;
-    else return 1;
+    return p->data_length > 0 ? ST_SKIP_DATA : ST_ANS_1;
 }
 
 static void
@@ -622,11 +621,11 @@ static const struct parser_state_transition SKIP_13[] = {
 };
 
 static const struct parser_state_transition SKIP_14[] = {
-        {.when = ANY, .dest = ST_SKIP_15, .act1 = next_state,},
+        {.when = ANY, .dest = ST_ANS_1, .act1 = next_state,},
 };
 
 static const struct parser_state_transition SKIP_15[] = {
-        {.when = ANY, .dest = ST_SKIP_16, .act1 = next_state,},
+        {.when = ANY, .dest = ST_ANS_2, .act1 = next_state,},
 };
 
 static const struct parser_state_transition SKIP_16[] = {
@@ -711,7 +710,7 @@ static const struct parser_state_transition SKIP_DATA_LENGTH_0[] = {
 };
 
 static const struct parser_state_transition SKIP_DATA[] = {
-        {.when = ANY, .dest_f = skip_data},
+        {.when = ANY, .dest_f = skip_data, .act1 = next_state},
 };
 
 static const struct parser_state_transition IP_4_ADDRESS_1[] = {
@@ -795,7 +794,7 @@ static const struct parser_state_transition IP_6_ADDRESS_16[] = {
 };
 
 static const struct parser_state_transition END_IP[] = {
-        {.when = ANY, .dest = ST_SKIP_15, .act1 = next_state,},
+        {.when = ANY, .dest = ST_ANS_1, .act1 = next_state,},
 };
 
 static const struct parser_state_transition INVALID_INPUT_FORMAT[] = {
@@ -1021,6 +1020,7 @@ struct doh_response *doh_response_parser_init() {
         free(ans);
         return NULL;
     }
+    parser_set_attachment(ans->_doh_parser->parser, ans->_doh_parser);
 
     return ans;
 }
@@ -1032,11 +1032,6 @@ bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, siz
 
     for (size_t i = 0; i < s_length; i++) {
         const struct parser_event *ret = parser_feed(doh_response->_doh_parser->parser, s[i]);
-        if (i == 702) {
-            printf("asd");
-        }
-        if (doh_response->_doh_parser->reading_data)
-            doh_response->_doh_parser->bytes_read++;
 
         switch (ret->type) {
             case CONTENT_LENGTH_N:
@@ -1128,6 +1123,9 @@ bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, siz
                 doh_response->_doh_parser->parser = NULL;
                 return error(doh_response, INVALID_INPUT_FORMAT_ERROR);
         }
+
+        if (doh_response->_doh_parser->reading_data)
+            doh_response->_doh_parser->bytes_read++;
     }
 
     if (doh_response_parser_is_done(doh_response)) {
