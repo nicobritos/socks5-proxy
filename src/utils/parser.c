@@ -11,6 +11,8 @@ struct parser {
     const unsigned     *classes;
     /** definiciÃ³n de estados */
     const struct parser_definition *def;
+    /** Data adicional provista por el usuario */
+    void *attachment;
 
     /* estado actual */
     unsigned            state;
@@ -42,6 +44,12 @@ parser_init(const unsigned *classes,
 }
 
 void
+parser_set_attachment(struct parser *p, void *attachment) {
+    if (p != NULL)
+        p->attachment = attachment;
+}
+
+void
 parser_reset(struct parser *p) {
     p->state   = p->def->start_state;
 }
@@ -69,12 +77,21 @@ parser_feed(struct parser *p, const uint8_t c) {
         }
 
         if(matched) {
+            unsigned dest;
+
+            if (state[i].dest_f != NULL) {
+                dest = state[i].dest_f(p->attachment, c);
+            } else {
+                dest = state[i].dest;
+            }
+
             state[i].act1(&p->e1, c);
             if(state[i].act2 != NULL) {
                 p->e1.next = &p->e2;
                 state[i].act2(&p->e2, c);
             }
-            p->state = state[i].dest;
+
+            p->state = dest;
             break;
         }
     }

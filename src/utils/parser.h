@@ -24,7 +24,6 @@ struct parser_event {
     uint8_t  data[3];
     /** cantidad de datos en el buffer `data' */
     uint8_t  n;
-
     /** lista de eventos: si es diferente de null ocurrieron varios eventos */
     struct parser_event *next;
 };
@@ -35,6 +34,8 @@ struct parser_state_transition {
     int       when;
     /** descriptor del estado destino cuando se cumple la condiciÃ³n */
     unsigned  dest;
+    /** si no es NULL se ejecuta para determinar el .dest */
+    unsigned  (*dest_f)(void *attachment, const uint8_t c);
     /** acciÃ³n 1 que se ejecuta cuando la condiciÃ³n es verdadera. requerida. */
     void    (*act1)(struct parser_event *ret, const uint8_t c);
     /** otra acciÃ³n opcional */
@@ -42,7 +43,7 @@ struct parser_state_transition {
 };
 
 /** predicado para utilizar en `when' que retorna siempre true */
-static const unsigned ANY = 1 << 9;
+static const int ANY = 1u << 9u;
 
 /** declaraciÃ³n completa de una mÃ¡quina de estados */
 struct parser_definition {
@@ -65,6 +66,9 @@ struct parser_definition {
 struct parser *
 parser_init    (const unsigned *classes,
                 const struct parser_definition *def);
+
+void
+parser_set_attachment(struct parser *p, void *attachment);
 
 /** destruye el parser */
 void
