@@ -96,24 +96,20 @@ int main(int argc, char* argv[]){
     -cargar el datagrama con usuario y password minimo
     -parsear respuesta para ver si valido el usuario o no
 */
-static void requestToServer(const char *request, const uint8_t reqlen, const char *response,const uint8_t reslen, bool *reqflag, bool *resflag){
+static void requestToServer(const uint8_t *request, const uint8_t reqlen, uint8_t *response, const uint8_t reslen, bool *reqflag, bool *resflag){
     int ret;
-
     /* Send request to the server */
-    ret = sctp_sendmsg (sd, (void *) request, (size_t) reqlen,NULL, 0, 0, 0, 0, 0, 0);
+    ret = sctp_sendmsg (sd, (void *)request, (size_t) reqlen,NULL, 0, 0, 0, 0, 0, 0);
 
-    if(ret == -1){
-        reqflag = false;
+    if(ret == -1 || ret == 0){
+        *reqflag = false;
+        return;
         //ERROR
-    }
-
-    uint8_t answer[DATGRAM_MAXLENGTH];
-    
+    } 
     /* Receive the answer from the server */
-    ret = sctp_recvmsg (sd, (void *) response, sizeof (reslen),(struct sockaddr *) NULL, 0,&sndrcvinfo, &flags);
-
-    if(ret == -1){
-        resflag = true;
+    ret = sctp_recvmsg (sd, response, 2,(struct sockaddr *) NULL, 0,&sndrcvinfo, &flags);
+    if(ret == -1 || ret == 0){
+        *resflag = false;
         //ERROR
     }
 }
@@ -133,13 +129,12 @@ static bool authenticate_user(const char *username, const char *password){
     const int DATAGRAM_MAX_LENGTH = (3 + 2*255);
     uint8_t datagram[DATAGRAM_MAX_LENGTH];
 
-    const int ANSWER_MAX_LENGTH = 2;
+    const int ANSWER_MAX_LENGTH = 300;
     uint8_t answer[ANSWER_MAX_LENGTH];
 
     bool *dflag = true;
     bool *aflag = true;
 
-    const int
     const uint8_t ver = 0x01;
     const uint8_t ulen = (uint8_t) strlen(username);
     const uint8_t plen = (uint8_t) strlen(password);
@@ -157,7 +152,7 @@ static bool authenticate_user(const char *username, const char *password){
     }
 
     /* Load plen into datagram */
-    datagram[2+ulen] = plen;
+    datagram[2 + ulen] = plen;
 
     /* Load password into datagram */
     for(int i=0 ; i<plen ; i++){
@@ -165,35 +160,23 @@ static bool authenticate_user(const char *username, const char *password){
     }
 
 
-    requestToServer(datagram,datalen,answer,ANSWER_MAX_LENGTH,&dflag,&aflag);
-    printf("%d\n",dflag);
-    printf("%d\n",aflag);
-    // int ret;
+    requestToServer(datagram,datalen,answer,sizeof(uint8_t) * 300,&dflag,&aflag);
 
-    // /* Send request to the server */
-    // ret = sctp_sendmsg (sd, (void *) datagram, (size_t) datalen,NULL, 0, 0, 0, 0, 0, 0);
+    if(!dflag){
+        printf("Error sending request\n");
 
-    // if(ret == -1){
-    //     //ERROR
-    // }
+    }
 
-    // uint8_t answer[DATGRAM_MAXLENGTH];
-    
-    // /* Receive the answer from the server */
-    // ret = sctp_recvmsg (sd, (void *) answer, sizeof (buffer),(struct sockaddr *) NULL, 0,&sndrcvinfo, &flags);
+    if(!aflag){
+        printf("Error receiving response\n");
+    }
 
-    // if(ret == -1){
-    //     //ERROR
-    // }
-
-    if(answer[1] == 0){
-        printf("User Authenticated!!\n");
+    if(answer[0] == 0x00){
+        printf("User Authenticated!!\n");        
         return true;
     }
     printf("User authentication failed\n");
     return false;
-
-    //PARSEAR LA RESPUESTA
 }
 
 
@@ -201,7 +184,7 @@ static void login(){
     char username[MAX_BUFFER];
     char password[MAX_BUFFER];
     
-    printf("Hello! To access the menu, first log in\n");
+    printf("\nHello! To access the menu, first log in\n");
   
     printf("Username: ");
     if(fgets(buffer, sizeof(buffer), stdin) != NULL){
@@ -225,7 +208,7 @@ static void login(){
     }
 
     if(!logged){
-        printf("Check if the username and password entered are correct\n");
+        printf("Check if the username and password are correct\n");
         return;
     }
 }

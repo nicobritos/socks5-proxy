@@ -135,18 +135,21 @@ int main(){
             if(buffer[0] == 0x01){
                 bool userAuth = authenticate_user(buffer);
                 uint8_t response[2];
-                response[0] = 0x00;
+                int length;
                 if(userAuth){
-                    printf("Username: %s has login!!\n",user);                   
-                    response[1] = 0x00;
+                    printf("Username: %s has login!!\n",user);   
+                    response[0] = 0x00;  
+                    char *message = "Helloadmin";        
+                    length = strlen(message);      
+                    for(int i=0 ; i<length ; i++){
+                        response[1 + i] = (uint8_t) message[i];
+                    }
+                    response[1+length] = '\0';
                 }
                 else{
-                    response[1] = 0x01;
+                    response[0] = 0x01;
                 }
-                printf("%d\n",response[0]);
-                printf("%d\n",response[1]);
-                int ret = sctp_sendmsg(connSock, (void *) response, (size_t) 2,NULL, 0, 0, 0, 0, 0, 0);
-                printf("%d\n",ret);
+                int ret = sctp_sendmsg(connSock, (void *) response, (size_t) 1+length,NULL, 0, 0, 0, 0, 0, 0);
                 if(ret == -1){
                     //ERROR
                     printf("Error sending message\n");
