@@ -351,7 +351,6 @@ static void request_init(unsigned state, struct selector_key *key);
 static unsigned request_read(struct selector_key *key);
 static unsigned request_process(struct selector_key *key, struct request_st *d);
 static unsigned request_connect(struct selector_key *key, struct request_st *d);
-static void request_write_init(unsigned state, struct selector_key *key);
 static unsigned request_write(struct selector_key *key);
 static void request_write_close(unsigned state, struct selector_key *key);
 static void log_request(const struct selector_key *key, const struct request_parser *p, enum socks_response_status socks_status);
@@ -416,7 +415,6 @@ static const struct state_definition client_statbl[] = {
                 .on_write_ready = request_connecting_write
         }, {
                 .state = REQUEST_WRITE,
-                .on_arrival = request_write_init,
                 .on_write_ready = request_write,
                 .on_departure = request_write_close
         }, {
