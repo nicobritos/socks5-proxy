@@ -31,7 +31,7 @@ typedef struct {
 struct doh_response {
     uint16_t status_code;
     char * code_description;
-    unsigned int ttl[MAX_ADDR]; // Time To Live (in seconds)
+    uint32_t ttl[MAX_ADDR]; // Time To Live (in seconds)
     int ipv4_qty; // Cantidad de ips en el array ipv4_addr
     uint32_t ipv4_addr[MAX_ADDR];
     int ipv6_qty; // Cantidad de ips en el array ipv6_addr
