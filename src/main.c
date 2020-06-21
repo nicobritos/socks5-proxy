@@ -135,7 +135,7 @@ main(const int argc, const char **argv) {
         goto finally;
     }
 
-    if (listen(server, 1024) < 0) {
+    if (listen(server, 20) < 0) {
         err_msg = "unable to listen";
         goto finally;
     }
