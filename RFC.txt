@@ -1,0 +1,251 @@
+Configure and Monitor for SOCKS V5 Server
+
+1. Initial negotiation
+
+   Once the SOCKS V5 server has started, and the client has connected to the
+   monitor port (default xxxx).
+   
+   Username/Password request:
+
+           +----+------+----------+------+----------+
+           |VER | ULEN |  UNAME   | PLEN |  PASSWD  |
+           +----+------+----------+------+----------+
+           | 1  |  1   | 1 to 255 |  1   | 1 to 255 |
+           +----+------+----------+------+----------+
+
+   The VER field contains the current version of the sub-negotiation,
+   which is X'01'. The ULEN field contains the length of the UNAME field
+   that follows. The UNAME field contains the username as known to the
+   source operating system. The PLEN field contains the length of the
+   PASSWD field that follows. The PASSWD field contains the password
+   association with the given UNAME.
+
+   The server verifies the supplied UNAME and PASSWD, and sends the
+   following response:
+
+                        +--------+----------+
+                        | STATUS |  MESSAGE |
+                        +--------+----------+
+                        |   1    | Variable |
+                        +--------+----------+
+
+   STATUS is 1 if authentication was successfully made, or 0 instead
+   MESSAGE is a null terminated string (ASCII). Here the server sends hello or customized error.  
+
+
+2. Monitor and Configure
+
+    COMMANDS
+
+    -GET METRICS - Code 0x01
+
+    					Request
+
+                        +--------+
+                        |  CODE  |
+                        +--------+
+                        |   1    |
+                        +--------+
+
+                        Response
+
+           +----------+----------+----------+
+           |   ECON   |   ACON   |  BYTES   | 
+           +----------+----------+----------+
+           |  	4     |     4    |    4     |  
+           +----------+----------+----------+
+
+        o   ECON - number of established connections
+        o   ACON - number of actual connections
+        o   BYTES - total bytes transferred
+
+
+    -GET USERS - Code 0x02
+
+    					Request
+
+                        +--------+
+                        |  CODE  |
+                        +--------+
+                        |   1    |
+                        +--------+
+
+                        Response
+
+           +------------+------------+
+           |    USER    |   STATUS   | 
+           +------------+------------+
+           |  Variable  |     1      |  
+           +------------+------------+
+
+        o   USER - user name
+        o   STATUS - 1 Indicates that USER is authorized to use the Proxy, 0 that it is not.
+
+	USER is a null terminated string
+	End of users is indicated by \0\0
+
+	Example
+
+	'Juan\0\1Gianfranco\0\1Nicolas\0\1Ignacio\0\1Agustin\0\1\0\0' 
+
+
+
+	-GET ACCESS LOG - Code 0x03
+
+    					Request
+
+                        +--------+
+                        |  CODE  |
+                        +--------+
+                        |   1    |
+                        +--------+
+
+                        Response
+
+         +------------+------------+-------+------------+------------+------------+------------+------------+
+         |    TIME    |    USER    | RTYPE |    OIP     |    OPORT   |    DEST    |    DPORT   |    STATUS  |
+         +------------+------------+-------+------------+------------+------------+------------+------------+
+         |  Variable  |  Variable  |   1   |  Variable  |   Variable |   Variable |   Variable |      1     |
+         +------------+------------+-------+------------+------------+------------+------------+------------+
+
+     	TIME, USER,RTYPE,OIP, OPORT, DEST, DPORT are null terminated strings
+     	RTYPE 'A' is expected
+     	STATUS can be 0 or 1 (see GET USERS)
+     	Each entry is separated with a \0\0
+     	End of entries is indicated by \0\0\0
+
+    	Example
+
+    	'2020-06-15T19:56:34Z\0Juan\0A\0192.168.1.100\09090\0www.itba.edu.ar\080\0\1\0\0
+     	 2020-06-15T19:52:43Z\0Gianfranco\0A\0192.168.1.123\09091\0www.itba.edu.ar\080\0\1\0\0\0'
+
+
+	-GET PASSWORDS - Code 0x04
+
+    					Request
+
+                        +--------+
+                        |  CODE  |
+                        +--------+
+                        |   1    |
+                        +--------+
+
+                        Response
+
+         +------------+------------+-------+------------+------------+------------+------------+------------+
+         |    TIME    |    USER    | RTYPE |  PROTOCOL  |    DEST    |    DPORT   |    ULOG    |  PASSWORD  |
+         +------------+------------+-------+------------+------------+------------+------------+------------+
+         |  Variable  |  Variable  |   1   |  Variable  |   Variable |   Variable |   Variable |  Variable  |
+         +------------+------------+-------+------------+------------+------------+------------+------------+
+
+     	TIME, USER,RTYPE,PROTOCOL, DEST,DPORT, ULOG are null terminated strings
+     	USER - Requesting user
+     	ULOG - Logged User
+     	RTYPE 'P' is expected
+     	Each entry is separated with a \0\0
+     	End of entries is indicated by \0\0\0
+
+    Example
+
+    '2020-06-15T19:56:34Z\0Juan\0P\0HTTP\0www.itba.edu.ar\080\0Gianfranco\0\pass\0\0
+     2020-06-15T19:12:12Z\0Juan\0P\0POP3\0www.itba.edu.ar\0110\0Gianfranco\0\pass\0\0\0'
+
+        
+
+
+	-GET VARS - Code 0x05
+
+    					Request
+
+                        +--------+
+                        |  CODE  |
+                        +--------+
+                        |   1    |
+                        +--------+
+
+                        Response
+
+           +------------+----------+
+           |    VCODE   |  VVALUE  |
+           +------------+----------+
+           |      1     | Variable |
+           +------------+--- ------+
+
+        o   VCODE - Reference to Var
+        		+ I/0 TIMEOUT - Code 0x01
+        		+ - Code 0x02
+        		+ - Code 0x03
+
+        		(faltan definir algunas variables mas)
+
+        o   VVALUE - Variable Value as string. It is null terminated
+
+           
+
+
+
+           +------------+-------------------+
+           |    VCODE   |  VLEN |   VVALUE  |
+           +------------+-------------------+
+           |      1     |   1   |  Variable |
+           +------------+-------------------+
+
+        o   VCODE - Reference to Var
+        		+ I/0 TIMEOUT - Code 0x01
+        		+ - Code 0x02
+        		+ - Code 0x03
+        o   VLEN - VVALUE length
+        o   VVALUE - Variable Value
+
+
+
+	USER is a null terminated string
+	End of users is indicated by \0\0
+
+	Example
+
+	'Juan\0\1Gianfranco\0\1Nicolas\0\1Ignacio\0\1Agustin\0\1\0\0'  
+
+
+	-SET USER - Code 0x06
+
+	                Request
+
+           +---------+------------+------------+
+           |   CODE  |    USER    |   MODE     | 
+           +---------+------------+------------+
+           |    1    |  Variable  |     1      |  
+           +---------+------------+------------+
+
+        o   USER - user name
+        o   MODE
+        	+ 0x00 - Disables user to use Proxy
+        	+ 0x01 - Enables user to use Proxy, creates user if it does not exists
+        	+ 0x02 - Removes user
+
+
+    -SET VAR - Code 0x07
+
+	                Request
+
+           +---------+------------+
+           |   CODE  |   VVALUE   | 
+           +---------+------------+
+           |    1    |  Variable  |  
+           +---------+------------+
+
+        o   VVALUE
+        	+ I/0 TIMEOUTS is size_t big endian
+        	
+	 
+
+
+	 
+
+
+
+
+
+
+
+
