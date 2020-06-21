@@ -98,8 +98,11 @@ parser_feed(struct parser *p, const uint8_t c) {
     return &p->e1;
 }
 
-
-static const unsigned classes[0xFF] = {0x00};
+/**
+ * 0xFF es solo 255 elementos, con un uint8_t podemos
+ * referenciar 256 elementos
+ */
+static const unsigned classes[0xFF + 1] = {0x00};
 
 const unsigned *
 parser_no_classes(void) {
