@@ -19,7 +19,7 @@
 #include <errno.h>
 #include <getopt.h>
 
-#include "include/MonitorClient.h"
+#include "MonitorClient.h"
 
 #define MAX_BUFFER 1024
 #define MY_PORT_NUM 62324
@@ -99,14 +99,14 @@ static void requestToServer(const uint8_t *request, const uint8_t reqlen, uint8_
 static bool authenticate_user(const char *username, const char *password){
 
     /* REQUEST
-    +----+------+----------+------+----------+
-    |VER | ULEN |  UNAME   | PLEN |  PASSWD  |
-    +----+------+----------+------+----------+
-    | 1  |  1   | 1 to 255 |  1   | 1 to 255 |
-    +----+------+----------+------+----------+
+    +-----+----------+----------+
+    | VER |  UNAME   |  PASSWD  |
+    +-----+----------+----------+
+    |  1  | Variable | Variable |
+    +-----+----------+----------+
     */
 
-    const int DATAGRAM_MAX_LENGTH = (3 + 2*255);
+    const int DATAGRAM_MAX_LENGTH = (1 + 2*255);
     uint8_t datagram[DATAGRAM_MAX_LENGTH];
 
     const uint8_t ver = 0x01;
@@ -115,19 +115,21 @@ static bool authenticate_user(const char *username, const char *password){
     const uint8_t datalen = 3 + ulen + plen;
 
     datagram[0] = ver;
-    datagram[1] = ulen;
 
     for(int i=0 ; i<ulen ; i++){
-        datagram[2 + i] = (uint8_t) username[i];
+        datagram[1 + i] = (uint8_t) username[i];
     }
 
-    datagram[2 + ulen] = plen;
+    datagram[1 + ulen] = (uint8_t) '\0';
 
     for(int i=0 ; i<plen ; i++){
-        datagram[3 + ulen + i] = (uint8_t) password[i];
+        datagram[2 + ulen + i] = (uint8_t) password[i];
     }
 
-    const int ANSWER_MAX_LENGTH = 256;
+    datagram[2 + ulen + plen] = (uint8_t) '\0';
+
+
+    const int ANSWER_MAX_LENGTH = (1 + 255);
     uint8_t answer[ANSWER_MAX_LENGTH];
 
     bool *dflag = true;
@@ -174,7 +176,7 @@ static void login(){
   
     printf("Username: ");
     if(fgets(buffer, sizeof(buffer), stdin) != NULL){
-        buffer[strcspn(buffer, "\r\n")] = 0;
+        buffer[strcspn(buffer, "\r\n")] = '\0';
         sscanf(buffer, "%s", username);
     }
 
@@ -185,7 +187,7 @@ static void login(){
     
     printf("Password: ");
     if(fgets(buffer, sizeof(buffer), stdin) != NULL){
-        buffer[strcspn(buffer, "\r\n")] = 0;
+        buffer[strcspn(buffer, "\r\n")] = '\0';
         sscanf(buffer, "%s", password);
         if(strlen(password) <= 255)
             logged = authenticate_user(username,password);
