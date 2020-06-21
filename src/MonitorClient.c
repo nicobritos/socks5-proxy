@@ -115,18 +115,21 @@ static bool authenticate_user(const char *username, const char *password){
     const uint8_t datalen = 3 + ulen + plen;
 
     datagram[0] = ver;
+    strcpy(datagram+1,username);
 
-    for(int i=0 ; i<ulen ; i++){
-        datagram[1 + i] = (uint8_t) username[i];
-    }
+    strcpy(datagram+(1+ulen+1),password);
 
-    datagram[1 + ulen] = (uint8_t) '\0';
+    // for(int i=0 ; i<ulen ; i++){
+    //     datagram[1 + i] = (uint8_t) username[i];
+    // }
 
-    for(int i=0 ; i<plen ; i++){
-        datagram[2 + ulen + i] = (uint8_t) password[i];
-    }
+    // datagram[1 + ulen] = (uint8_t) '\0';
 
-    datagram[2 + ulen + plen] = (uint8_t) '\0';
+    // for(int i=0 ; i<plen ; i++){
+    //     datagram[2 + ulen + i] = (uint8_t) password[i];
+    // }
+
+    // datagram[2 + ulen + plen] = (uint8_t) '\0';
 
 
     const int ANSWER_MAX_LENGTH = (1 + 255);
