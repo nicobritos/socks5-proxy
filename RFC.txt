@@ -7,18 +7,17 @@ Configure and Monitor for SOCKS V5 Server
    
    Username/Password request:
 
-           +----+------+----------+------+----------+
-           |VER | ULEN |  UNAME   | PLEN |  PASSWD  |
-           +----+------+----------+------+----------+
-           | 1  |  1   | 1 to 255 |  1   | 1 to 255 |
-           +----+------+----------+------+----------+
+           +-----+----------+----------+
+           | VER |  UNAME   |  PASSWD  |
+           +-----+----------+----------+
+           |  1  | Variable | Variable |
+           +-----+----------+----------+
 
    The VER field contains the current version of the sub-negotiation,
-   which is X'01'. The ULEN field contains the length of the UNAME field
-   that follows. The UNAME field contains the username as known to the
-   source operating system. The PLEN field contains the length of the
-   PASSWD field that follows. The PASSWD field contains the password
-   association with the given UNAME.
+   which is X'01'. The UNAME field contains the username as known to the
+   source operating system. The UNAME field is a null terminated string (ASCII). 
+   The PASSWD field contains the password association with the given UNAME.
+   The PASSWD field is a null terminated string (ASCII). 
 
    The server verifies the supplied UNAME and PASSWD, and sends the
    following response:
