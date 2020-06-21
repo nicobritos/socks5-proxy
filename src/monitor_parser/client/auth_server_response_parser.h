@@ -11,17 +11,12 @@
  */
 #include <stdint.h>
 #include <stddef.h>
-
-typedef enum errors{
-    NO_ERROR,
-    INVALID_INPUT_FORMAT_ERROR,  // Si el datagrama no cumple el formato del RFC
-    REALLOC_ERROR,               // Si al hacer un realloc se produjo algun error
-}auth_server_parser_error_t;
+#include "parser_errors.h"
 
 struct auth_response {
     uint8_t status;
     char * message;
-    auth_server_parser_error_t error;
+    parser_error_t error;
 };
 
 /**

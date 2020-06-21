@@ -9,7 +9,7 @@
 /* Funciones auxiliares */
 void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
 
-struct users *error(struct users *ans, get_users_parser_error_t error_type);
+struct users *error(struct users *ans, parser_error_t error_type);
 
 // definición de maquina
 
@@ -181,7 +181,7 @@ void free_users(struct users *users) {
     }
 }
 
-struct users *error(struct users *ans, get_users_parser_error_t error_type) {
+struct users *error(struct users *ans, parser_error_t error_type) {
     free_users(ans);
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;

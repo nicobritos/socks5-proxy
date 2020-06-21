@@ -104,19 +104,20 @@ Configure and Monitor for SOCKS V5 Server
          +------------+------------+-------+------------+------------+------------+------------+------------+
          |    TIME    |    USER    | RTYPE |    OIP     |    OPORT   |    DEST    |    DPORT   |    STATUS  |
          +------------+------------+-------+------------+------------+------------+------------+------------+
-         |  Variable  |  Variable  |   1   |  Variable  |   Variable |   Variable |   Variable |      1     |
+         |  Variable  |  Variable  |   1   |  Variable  |  Variable  |  Variable  |  Variable  |      1     |
          +------------+------------+-------+------------+------------+------------+------------+------------+
 
      	TIME, USER,RTYPE,OIP, OPORT, DEST, DPORT are null terminated strings
+        TIME is in format ISO-8601
      	RTYPE 'A' is expected
      	STATUS can be 0 or 1 (see GET USERS)
-     	Each entry is separated with a \0\0
-     	End of entries is indicated by \0\0\0
+     	Each entry is separated with a \0
+     	End of entries is indicated by \0\0
 
     	Example
 
-    	'2020-06-15T19:56:34Z\0Juan\0A\0192.168.1.100\09090\0www.itba.edu.ar\080\0\1\0\0
-     	 2020-06-15T19:52:43Z\0Gianfranco\0A\0192.168.1.123\09091\0www.itba.edu.ar\080\0\1\0\0\0'
+    	'2020-06-15T19:56:34Z\0Juan\0A\0192.168.1.100\09090\0www.itba.edu.ar\080\0\1\0
+     	 2020-06-15T19:52:43+04\0Gianfranco\0A\0192.168.1.123\09091\0www.itba.edu.ar\080\0\1\0\0'
 
 
 	-GET PASSWORDS - Code 0x04
