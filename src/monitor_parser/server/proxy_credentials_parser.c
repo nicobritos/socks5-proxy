@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../utils/parser.h"
+#include "../../utils/parser.h"
 #include "proxy_credentials_parser.h"
 
 #define CHUNK_SIZE 10
@@ -212,7 +212,7 @@ void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
  *     4. Run in the terminal "afl-fuzz -i parser_test_case -o afl-output -- ./proxy_credentials_parser @@"
  */
 
-
+/*
 int main(int argc, char ** argv){
     FILE * fp;
     int16_t c;
@@ -252,3 +252,4 @@ int main(int argc, char ** argv){
     proxy_credentials_free(ans);
     return 0;
 }
+*/

@@ -11,6 +11,7 @@
  *      3. La contraseña
  */
 #include <stdint.h>
+#include <stddef.h>
 
 typedef enum errors{
     NO_ERROR,
@@ -25,6 +26,10 @@ struct proxy_credentials {
     proxy_credentials_parser_error_t error;
 };
 
+/**
+ * Dado un datagrama (array de bytes) de autentificacion para el proxy y su longitud, parsea el datagrama
+ * Si no cumple con el RFC devuelve INVALID_INPUT_FORMAT_ERROR en el campo de error de la estructura.
+ */
 struct proxy_credentials * proxy_credentials_parser(uint8_t *s, size_t length);
 
 /**

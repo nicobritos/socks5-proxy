@@ -38,7 +38,7 @@ Configure and Monitor for SOCKS V5 Server
 
     -GET METRICS - Code 0x01
 
-    					Request
+    			        Request
 
                         +--------+
                         |  CODE  |
@@ -48,11 +48,11 @@ Configure and Monitor for SOCKS V5 Server
 
                         Response
 
-           +----------+----------+----------+
-           |   ECON   |   ACON   |  BYTES   | 
-           +----------+----------+----------+
-           |  	4     |     4    |    4     |  
-           +----------+----------+----------+
+                +------+------+-------+
+                | ECON | ACON | BYTES | 
+                +------+------+-------+
+                |   4  |   4  |   4   |  
+                +------+------+-------+
 
         o   ECON - number of established connections
         o   ACON - number of actual connections
