@@ -728,6 +728,9 @@ struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
             case COPY_TIME:
                 ans_error = add_to_string(&(ans->entries[ans->entry_qty].time), s[i], &current_time_length);
                 if(ans_error != NO_ERROR){
+                    if(ans->entries[ans->entry_qty].time != NULL){
+                        free(ans->entries[ans->entry_qty].time);
+                    }
                     parser_destroy(parser);
                     return error(ans, ans_error);
                 }
@@ -735,6 +738,10 @@ struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
             case COPY_USER:
                 ans_error = add_to_string(&(ans->entries[ans->entry_qty].user.user), s[i], &current_user_length);
                 if(ans_error != NO_ERROR){
+                    if(ans->entries[ans->entry_qty].user.user != NULL){
+                        free(ans->entries[ans->entry_qty].time);
+                        free(ans->entries[ans->entry_qty].user.user);
+                    }
                     parser_destroy(parser);
                     return error(ans, ans_error);
                 }
@@ -742,6 +749,11 @@ struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
             case COPY_OIP:
                 ans_error = add_to_string(&(ans->entries[ans->entry_qty].origin_ip), s[i], &current_oip_length);
                 if(ans_error != NO_ERROR){
+                    if(ans->entries[ans->entry_qty].origin_ip != NULL){
+                        free(ans->entries[ans->entry_qty].time);
+                        free(ans->entries[ans->entry_qty].user.user);
+                        free(ans->entries[ans->entry_qty].origin_ip);
+                    }
                     parser_destroy(parser);
                     return error(ans, ans_error);
                 }
@@ -753,6 +765,12 @@ struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
             case COPY_DESTINATION:
                 ans_error = add_to_string(&(ans->entries[ans->entry_qty].destination), s[i], &current_destination_length);
                 if(ans_error != NO_ERROR){
+                    if(ans->entries[ans->entry_qty].origin_ip != NULL){
+                        free(ans->entries[ans->entry_qty].time);
+                        free(ans->entries[ans->entry_qty].user.user);
+                        free(ans->entries[ans->entry_qty].origin_ip);
+                        free(ans->entries[ans->entry_qty].destination);
+                    }
                     parser_destroy(parser);
                     return error(ans, ans_error);
                 }
@@ -787,6 +805,18 @@ struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
                 finished = 1;
             break;
             case INVALID_INPUT_FORMAT_T:
+                if(ans->entries[ans->entry_qty].time != NULL){
+                    free(ans->entries[ans->entry_qty].time);
+                    if(ans->entries[ans->entry_qty].user.user != NULL){
+                        free(ans->entries[ans->entry_qty].user.user);
+                        if(ans->entries[ans->entry_qty].origin_ip != NULL){
+                            free(ans->entries[ans->entry_qty].origin_ip);
+                            if(ans->entries[ans->entry_qty].destination != NULL){
+                                free(ans->entries[ans->entry_qty].destination);
+                            }
+                        }
+                    }
+                }
                 parser_destroy(parser);
                 return error(ans, INVALID_INPUT_FORMAT_ERROR);
         }
@@ -801,6 +831,15 @@ struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
 
 void free_access_log(struct access_log *access_log) {
     if (access_log != NULL) {
+        if(access_log->entries != NULL){
+            for(int i = 0; i<access_log->entry_qty; i++){
+                free(access_log->entries[i].time);
+                free(access_log->entries[i].user.user);
+                free(access_log->entries[i].origin_ip);
+                free(access_log->entries[i].destination);
+            }
+            free(access_log->entries);
+        }
         free(access_log);
     }
 }
@@ -837,6 +876,7 @@ void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
  *     4. Run in the terminal "afl-fuzz -i parser_test_case -o afl-output -- ./get_access_log_parser @@"
  */
 
+/*
 int main(int argc, char ** argv){
     FILE * fp;
     int16_t c;
@@ -884,4 +924,4 @@ int main(int argc, char ** argv){
     free_access_log(ans);
     return 0;
 }
-
+*/
