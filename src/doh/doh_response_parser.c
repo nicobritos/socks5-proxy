@@ -276,8 +276,7 @@ static unsigned
 skip_data(void *attachment, const uint8_t c) {
     struct doh_parser *p = attachment;
     (p->data_length)--;
-    unsigned ret = p->data_length > 0 ? ST_SKIP_DATA : ST_ANS_1;
-    return ret;
+    return p->data_length > 0 ? ST_SKIP_DATA : ST_ANS_1;
 }
 
 static void
@@ -1138,8 +1137,6 @@ bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, siz
                 parser_destroy(doh_response->_doh_parser->parser);
                 doh_response->_doh_parser->parser = NULL;
                 return error(doh_response, INVALID_INPUT_FORMAT_ERROR);
-            case SUCCESS:
-                break;
             default:
                 break;
         }
@@ -1177,15 +1174,21 @@ bool doh_response_parser_error(struct doh_response *doh_response) {
 
 void doh_response_parser_free(struct doh_response *http_response) {
     if (http_response != NULL) {
-        if (http_response->_doh_parser->parser != NULL) {
-            if (http_response->code_description != NULL) {
-                free(http_response->code_description);
-            }
+        if (http_response->code_description != NULL) {
+            free(http_response->code_description);
+            http_response->code_description = NULL;
+        }
+
+        if (http_response->_doh_parser != NULL) {
             if (http_response->_doh_parser->parser != NULL) {
                 parser_destroy(http_response->_doh_parser->parser);
+                http_response->_doh_parser->parser = NULL;
             }
+
             free(http_response->_doh_parser);
+            http_response->_doh_parser = NULL;
         }
+
         free(http_response);
     }
 }

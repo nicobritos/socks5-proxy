@@ -261,9 +261,11 @@ struct socks5 {
     union {
         struct hello_st hello;
         struct auth_user_pass_st auth_user_pass;
-        struct request_st request;
         struct copy copy;
     } client;
+
+    struct request_st client_request;
+
     /** estados para el server_fd */
     union {
         struct connecting connecting;
@@ -530,10 +532,6 @@ static void socks5_destroy(struct socks5 *s) {
 
 /** realmente destruye */
 static void socks5_destroy_(struct socks5 *s) {
-//    if (s->origin_resolution != NULL) {
-//        doh_response_parser_free(s->origin_resolution);
-//        s->origin_resolution = NULL;
-//    } TODO
     free(s);
 }
 
@@ -620,11 +618,6 @@ static void socksv5_close(struct selector_key *key) {
             free(s->dns.request);
             s->dns.request = NULL;
         }
-        // TODO
-//        if (s->dns.fd != -1 && s->dns.fd != key->fd) {
-//            close_fd_(s->dns.fd, key);
-//            s->dns.fd = -1;
-//        }
     }
     socks5_destroy(s);
 }
@@ -638,16 +631,12 @@ static void socksv5_done(struct selector_key* key) {
         close_fd_(ATTACHMENT(key)->server_fd, key);
         ATTACHMENT(key)->server_fd = -1;
     }
-    if (ATTACHMENT(key)->dns.fd != -1) {
-        close_fd_(ATTACHMENT(key)->dns.fd, key);
-        ATTACHMENT(key)->dns.fd = -1;
-    }
 }
 
 static void close_fd_(int fd, struct selector_key* key) {
     if (fd != -1) {
         if (SELECTOR_SUCCESS != selector_unregister_fd(key->s, fd)) {
-            abort();
+            return;
         }
         close(fd);
     }
@@ -917,7 +906,7 @@ static unsigned auth_user_pass_write(struct selector_key *key) {
 
 /** ---------------- REQUEST ---------------- */
 static void request_init(const unsigned state, struct selector_key *key) {
-    struct request_st *d = &ATTACHMENT(key)->client.request;
+    struct request_st *d = &ATTACHMENT(key)->client_request;
 
     d->read_buffer = &ATTACHMENT(key)->read_buffer;
     d->write_buffer = &ATTACHMENT(key)->write_buffer;
@@ -931,7 +920,7 @@ static void request_init(const unsigned state, struct selector_key *key) {
 }
 
 static unsigned request_read(struct selector_key *key) {
-    struct request_st *d = &ATTACHMENT(key)->client.request;
+    struct request_st *d = &ATTACHMENT(key)->client_request;
 
     unsigned ret = REQUEST_READ;
     bool error = false;
@@ -1040,7 +1029,7 @@ static unsigned request_connect(struct selector_key *key, struct request_st *d) 
 }
 
 static unsigned request_write(struct selector_key *key) {
-    struct request_st *d = &ATTACHMENT(key)->client.request;
+    struct request_st *d = &ATTACHMENT(key)->client_request;
     unsigned ret = REQUEST_READ;
     uint8_t *ptr;
     size_t count;
@@ -1073,7 +1062,7 @@ static unsigned request_write(struct selector_key *key) {
 }
 
 static void request_write_close(unsigned state, struct selector_key *key) {
-    request_parser_close(&ATTACHMENT(key)->client.request.parser);
+    request_parser_close(&ATTACHMENT(key)->client_request.parser);
 }
 
 static void log_request(const struct selector_key *key, const struct request_parser *p, enum socks_response_status socks_status) {
@@ -1095,7 +1084,7 @@ static void log_request(const struct selector_key *key, const struct request_par
         const char *connected_str = errored ? "no se pudo conectar" : "se conecto";
 
         if (s->credentials.username != NULL) {
-            if (s->client.request.request.address_type == REQUEST_ATYP_DOMAIN_NAME) {
+            if (s->client_request.request.address_type == REQUEST_ATYP_DOMAIN_NAME) {
                 append_to_log(
                         logger,
                         log_severity_info,
@@ -1105,9 +1094,9 @@ static void log_request(const struct selector_key *key, const struct request_par
                         ip_buffer_client,
                         port_client,
                         connected_str,
-                        s->client.request.request.domain_name,
+                        s->client_request.request.domain_name,
                         ip_buffer_server,
-                        s->client.request.request.port,
+                        s->client_request.request.port,
                         errored ? port_server : -1,
                         socks_status_str
                 );
@@ -1122,13 +1111,13 @@ static void log_request(const struct selector_key *key, const struct request_par
                         port_client,
                         connected_str,
                         ip_buffer_server,
-                        s->client.request.request.port,
+                        s->client_request.request.port,
                         errored ? port_server : -1,
                         socks_status_str
                 );
             }
         } else {
-            if (s->client.request.request.address_type == REQUEST_ATYP_DOMAIN_NAME) {
+            if (s->client_request.request.address_type == REQUEST_ATYP_DOMAIN_NAME) {
                 append_to_log(
                         logger,
                         log_severity_info,
@@ -1137,9 +1126,9 @@ static void log_request(const struct selector_key *key, const struct request_par
                         ip_buffer_client,
                         port_client,
                         connected_str,
-                        s->client.request.request.domain_name,
+                        s->client_request.request.domain_name,
                         ip_buffer_server,
-                        s->client.request.request.port,
+                        s->client_request.request.port,
                         errored ? port_server : -1,
                         socks_status_str
                 );
@@ -1153,7 +1142,7 @@ static void log_request(const struct selector_key *key, const struct request_par
                         port_client,
                         connected_str,
                         ip_buffer_server,
-                        s->client.request.request.port,
+                        s->client_request.request.port,
                         errored ? port_server : -1,
                         socks_status_str
                 );
@@ -1201,10 +1190,9 @@ static enum socks_v5state request_resolve_connect(struct selector_key *key, stru
 
     finally:
     if (error) {
-        if (s->dns.fd != -1) {
-            close(s->dns.fd);
-            s->dns.fd = -1;
-        }
+        selector_set_interest(key->s, s->dns.fd, OP_NOOP);
+        selector_set_interest(key->s, s->client_fd, OP_WRITE);
+        return REQUEST_WRITE;
     }
 
     return REQUEST_RESOLVE_CONNECT;
@@ -1213,7 +1201,7 @@ static enum socks_v5state request_resolve_connect(struct selector_key *key, stru
 static unsigned request_resolve_connect_write(struct selector_key *key) {
     int error;
     socklen_t len = sizeof(error);
-    struct request_st *d = &ATTACHMENT(key)->client.request;
+    struct request_st *d = &ATTACHMENT(key)->client_request;
     struct socks5 *s = ATTACHMENT(key);
 
     if (getsockopt(key->fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
@@ -1229,7 +1217,7 @@ static unsigned request_resolve_connect_write(struct selector_key *key) {
     s->dns.write_index = s->dns.read_index = 0;
     s->dns.request = getRequest(
             &s->dns.request_len,
-            s->client.request.request.domain_name,
+            s->client_request.request.domain_name,
             configuration.doh.sockaddr.ss_family,
             configuration.doh.domain_name);
 
@@ -1257,7 +1245,7 @@ static unsigned request_resolve_connect_write(struct selector_key *key) {
 
 static unsigned request_resolve_write(struct selector_key *key) {
     struct socks5 *s = ATTACHMENT(key);
-    struct request_st *d = &ATTACHMENT(key)->client.request;
+    struct request_st *d = &ATTACHMENT(key)->client_request;
 
     // Send the string to the server
     ssize_t n = send(
@@ -1266,6 +1254,7 @@ static unsigned request_resolve_write(struct selector_key *key) {
             MIN(s->dns.request_len - s->dns.write_index, DNS_BUFFER_SIZE - 1),
             MSG_NOSIGNAL);
     if (n < 0) {
+        // TODO: Log: DNS NO ESTA LEVANTADO
         d->status = socks_status_general_SOCKS_server_failure;
         selector_set_interest(key->s, s->dns.fd, OP_NOOP);
         selector_set_interest(key->s, *d->client_fd, OP_WRITE);
@@ -1283,7 +1272,7 @@ static unsigned request_resolve_write(struct selector_key *key) {
 
 static void request_resolve_read_init(const unsigned state, struct selector_key *key) {
     struct socks5 *s = ATTACHMENT(key);
-    struct request_st *d = &ATTACHMENT(key)->client.request;
+    struct request_st *d = &ATTACHMENT(key)->client_request;
 
     s->dns.origin_resolution = doh_response_parser_init();
     if (s->dns.origin_resolution == NULL) {
@@ -1295,7 +1284,7 @@ static void request_resolve_read_init(const unsigned state, struct selector_key 
 /** procesa el resultado de la resoluicion de nombres */
 static unsigned request_resolve_read(struct selector_key *key) {
     struct socks5 *s = ATTACHMENT(key);
-    struct request_st *d = &ATTACHMENT(key)->client.request;
+    struct request_st *d = &ATTACHMENT(key)->client_request;
 
     // Receive response from the server
     ssize_t n = recv(
@@ -1348,7 +1337,7 @@ static unsigned request_resolve_process(struct selector_key *key, struct request
 
 static unsigned request_resolve_set_address(struct selector_key *key, struct doh_response *doh) {
     struct socks5 *s = ATTACHMENT(key);
-    struct request_st *d = &s->client.request;
+    struct request_st *d = &s->client_request;
 
     if (s->dns.ipv4_index < doh->ipv4_qty) {
         struct sockaddr_in *in = (struct sockaddr_in*) &s->server_addr;
@@ -1414,7 +1403,7 @@ static void request_connecting_init(const unsigned state, struct selector_key *k
 
     d->client_fd = &ATTACHMENT(key)->client_fd;
     d->server_fd = &ATTACHMENT(key)->server_fd;
-    d->status = &ATTACHMENT(key)->client.request.status;
+    d->status = &ATTACHMENT(key)->client_request.status;
     d->write_buffer = &ATTACHMENT(key)->write_buffer;
 }
 
