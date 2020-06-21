@@ -81,11 +81,11 @@ Configure and Monitor for SOCKS V5 Server
         o   STATUS - 1 Indicates that USER is authorized to use the Proxy, 0 that it is not.
 
 	USER is a null terminated string
-	End of users is indicated by \0\0
+	End of users is indicated by \0 at the end of the list
 
 	Example
 
-	'Juan\0\1Gianfranco\0\1Nicolas\0\1Ignacio\0\1Agustin\0\1\0\0' 
+	'Juan\0\1Gianfranco\0\1Nicolas\0\1Ignacio\0\1Agustin\0\1\0' 
 
 
 

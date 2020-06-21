@@ -183,7 +183,6 @@ static struct parser_definition definition = {
 struct metrics * get_metrics_parser(uint8_t *s, size_t length) {
     struct metrics * ans = calloc(1, sizeof(*ans));
     struct parser *parser = parser_init(parser_no_classes(), &definition);
-    size_t message_length = 0;
     int finished = 0;
     for (size_t i = 0; i<length; i++) {
         const struct parser_event* ret = parser_feed(parser, s[i]);
