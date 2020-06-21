@@ -18,8 +18,11 @@
 #define MAX_BUFFER 1024
 #define MY_PORT_NUM 62324
 
+static bool logged = false;
 static char *user = "admin";
 static char *password = "adminadmin";
+static char buffer[MAX_BUFFER];
+
 
 static bool authenticate_user(char *buffer){
     uint8_t ulen = buffer[1];
@@ -51,7 +54,7 @@ int main(){
     struct sctp_sndrcvinfo sndrcvinfo;
     char buffer[MAX_BUFFER + 1];
 
-    listenSock = socket (AF_INET, SOCK_STREAM, IPPROTO_SCTP);
+    listenSock = socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP);
     if(listenSock == -1)
     {
         printf("Failed to create socket\n");
@@ -61,10 +64,10 @@ int main(){
 
     bzero((void *) &servaddr, sizeof (servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = htonl (INADDR_ANY);
-    servaddr.sin_port = htons (MY_PORT_NUM);
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    servaddr.sin_port = htons(MY_PORT_NUM);
 
-    ret = bind (listenSock, (struct sockaddr *) &servaddr, sizeof (servaddr));
+    ret = bind(listenSock, (struct sockaddr *) &servaddr, sizeof (servaddr));
 
     if(ret == -1 )
     {
@@ -79,8 +82,7 @@ int main(){
     initmsg.sinit_num_ostreams = 5;
     initmsg.sinit_max_instreams = 5;
     initmsg.sinit_max_attempts = 4;
-    ret = setsockopt (listenSock, IPPROTO_SCTP, SCTP_INITMSG,
-                      &initmsg, sizeof (initmsg));
+    ret = setsockopt(listenSock, IPPROTO_SCTP, SCTP_INITMSG, &initmsg, sizeof (initmsg));
 
     if(ret == -1 )
     {
@@ -101,9 +103,6 @@ int main(){
 
     while (1)
     {
-        char buffer[MAX_BUFFER + 1];
-        int len;
-
         //Clear the buffer
         bzero (buffer, MAX_BUFFER + 1);
 
