@@ -1,0 +1,4 @@
+USER mrose
++OK mrose is a real hoopy frood
+PASS secret
++OK mrose's maildrop has 2 messages (320 octets)

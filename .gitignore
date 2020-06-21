@@ -1,0 +1,9 @@
+
+.DS_Store
+*.pdf
+*/afl-output*
+*.plist
+src/pop3_sniffer
+src/http_sniffer
+src/doh_response_parser_feed
+*.dSYM*

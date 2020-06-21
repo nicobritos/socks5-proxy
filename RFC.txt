@@ -7,18 +7,17 @@ Configure and Monitor for SOCKS V5 Server
    
    Username/Password request:
 
-           +----+------+----------+------+----------+
-           |VER | ULEN |  UNAME   | PLEN |  PASSWD  |
-           +----+------+----------+------+----------+
-           | 1  |  1   | 1 to 255 |  1   | 1 to 255 |
-           +----+------+----------+------+----------+
+           +-----+----------+----------+
+           | VER |  UNAME   |  PASSWD  |
+           +-----+----------+----------+
+           |  1  | Variable | Variable |
+           +-----+----------+----------+
 
-   The VER field contains the current version of the subnegotiation,
-   which is X'01'. The ULEN field contains the length of the UNAME field
-   that follows. The UNAME field contains the username as known to the
-   source operating system. The PLEN field contains the length of the
-   PASSWD field that follows. The PASSWD field contains the password
-   association with the given UNAME.
+   The VER field contains the current version of the sub-negotiation,
+   which is X'01'. The UNAME field contains the username as known to the
+   source operating system. The UNAME field is a null terminated string (ASCII). 
+   The PASSWD field contains the password association with the given UNAME.
+   The PASSWD field is a null terminated string (ASCII). 
 
    The server verifies the supplied UNAME and PASSWD, and sends the
    following response:
@@ -29,8 +28,8 @@ Configure and Monitor for SOCKS V5 Server
                         |   1    | Variable |
                         +--------+----------+
 
-   STATUS is 0 if autentication was succesfully made, or 0 instead
-   MESSAGE is a null terminated string (ASCII). Here the server sends hello or custumized error.  
+   STATUS is 1 if authentication was successfully made, or 0 instead
+   MESSAGE is a null terminated string (ASCII). Here the server sends hello or customized error.  
 
 
 2. Monitor and Configure
@@ -39,7 +38,7 @@ Configure and Monitor for SOCKS V5 Server
 
     -GET METRICS - Code 0x01
 
-    					Resquest
+    			        Request
 
                         +--------+
                         |  CODE  |
@@ -49,20 +48,20 @@ Configure and Monitor for SOCKS V5 Server
 
                         Response
 
-           +----------+----------+----------+
-           |   ECON   |   ACON   |  BYTES   | 
-           +----------+----------+----------+
-           |  	4	  |     4    |    4     |  
-           +----------+----------+----------+
+                +------+------+-------+
+                | ECON | ACON | BYTES | 
+                +------+------+-------+
+                |   4  |   4  |   4   |  
+                +------+------+-------+
 
-        o   ECON - number of establised connections
+        o   ECON - number of established connections
         o   ACON - number of actual connections
         o   BYTES - total bytes transferred
 
 
     -GET USERS - Code 0x02
 
-    					Resquest
+    					Request
 
                         +--------+
                         |  CODE  |
@@ -79,20 +78,20 @@ Configure and Monitor for SOCKS V5 Server
            +------------+------------+
 
         o   USER - user name
-        o   STATUS - 1 Indicates that USER is athorized to use the Proxy, 0 that it is not.
+        o   STATUS - 1 Indicates that USER is authorized to use the Proxy, 0 that it is not.
 
 	USER is a null terminated string
-	End of users is indicated by \0\0
+	End of users is indicated by \0 at the end of the list
 
 	Example
 
-	'Juan\0\1Gianfranco\0\1Nicolas\0\1Ignasio\0\1Agustin\0\1\0\0' 
+	'Juan\0\1Gianfranco\0\1Nicolas\0\1Ignacio\0\1Agustin\0\1\0' 
 
 
 
 	-GET ACCESS LOG - Code 0x03
 
-    					Resquest
+    					Request
 
                         +--------+
                         |  CODE  |
@@ -109,7 +108,7 @@ Configure and Monitor for SOCKS V5 Server
          +------------+------------+-------+------------+------------+------------+------------+------------+
 
      	TIME, USER,RTYPE,OIP, OPORT, DEST, DPORT are null terminated strings
-     	RTYPE 'A' is espected
+     	RTYPE 'A' is expected
      	STATUS can be 0 or 1 (see GET USERS)
      	Each entry is separated with a \0\0
      	End of entries is indicated by \0\0\0
@@ -117,12 +116,12 @@ Configure and Monitor for SOCKS V5 Server
     	Example
 
     	'2020-06-15T19:56:34Z\0Juan\0A\0192.168.1.100\09090\0www.itba.edu.ar\080\0\1\0\0
-     	 2020-06-15T19:52:43Z\0JGianfranco\0A\0192.168.1.123\09091\0www.itba.edu.ar\080\0\1\0\0\0'
+     	 2020-06-15T19:52:43Z\0Gianfranco\0A\0192.168.1.123\09091\0www.itba.edu.ar\080\0\1\0\0\0'
 
 
 	-GET PASSWORDS - Code 0x04
 
-    					Resquest
+    					Request
 
                         +--------+
                         |  CODE  |
@@ -141,7 +140,7 @@ Configure and Monitor for SOCKS V5 Server
      	TIME, USER,RTYPE,PROTOCOL, DEST,DPORT, ULOG are null terminated strings
      	USER - Requesting user
      	ULOG - Logged User
-     	RTYPE 'P' is espected
+     	RTYPE 'P' is expected
      	Each entry is separated with a \0\0
      	End of entries is indicated by \0\0\0
 
@@ -155,7 +154,7 @@ Configure and Monitor for SOCKS V5 Server
 
 	-GET VARS - Code 0x05
 
-    					Resquest
+    					Request
 
                         +--------+
                         |  CODE  |
@@ -176,7 +175,7 @@ Configure and Monitor for SOCKS V5 Server
         		+ - Code 0x02
         		+ - Code 0x03
 
-        		(faltan definiar algunas variables mas)
+        		(faltan definir algunas variables mas)
 
         o   VVALUE - Variable Value as string. It is null terminated
 
@@ -204,7 +203,7 @@ Configure and Monitor for SOCKS V5 Server
 
 	Example
 
-	'Juan\0\1Gianfranco\0\1Nicolas\0\1Ignasio\0\1Agustin\0\1\0\0'  
+	'Juan\0\1Gianfranco\0\1Nicolas\0\1Ignacio\0\1Agustin\0\1\0\0'  
 
 
 	-SET USER - Code 0x06
