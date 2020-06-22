@@ -10,10 +10,10 @@
  */
 #include <stdint.h>
 #include <stddef.h>
-#include "parser_errors.h"
+#include "../parser_errors.h"
 
 struct vars {
-    uint32_t io_timeout;
+    size_t io_timeout;
     parser_error_t error;
 };
 

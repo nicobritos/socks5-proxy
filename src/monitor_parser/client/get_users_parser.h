@@ -12,7 +12,7 @@
  */
 #include <stdint.h>
 #include <stddef.h>
-#include "parser_errors.h"
+#include "../parser_errors.h"
 
 struct user {
     char * user;

@@ -11,7 +11,7 @@
  */
 #include <stdint.h>
 #include <stddef.h>
-#include "parser_errors.h"
+#include "../parser_errors.h"
 
 struct auth_response {
     uint8_t status;
