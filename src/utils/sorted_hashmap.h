@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#define GENERIC_INITIAL_HASH_VALUE 5381u
+#define GENERIC_SHIFT_HASH_VALUE 5u
+
 typedef struct hashmapCDT *sorted_hashmap_t;
 typedef struct hashmap_nodeCDT *sorted_hashmap_node;
 typedef uint64_t hash_t;

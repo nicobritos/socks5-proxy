@@ -9,8 +9,6 @@
 #include <string.h>
 
 #define INITIAL_HASHMAP_SIZE 50
-#define INITIAL_HASH_VALUE 5381u
-#define SHIFT_HASH_VALUE 5u
 
 /** ------------- DECLARATIONS ------------- */
 /**
@@ -135,10 +133,10 @@ static hash_t auth_user_pass_hasher(void *e) {
     struct auth_user_pass_credentials *credentials = e;
 
     /** See https://stackoverflow.com/a/7666577 */
-    hash_t hash = INITIAL_HASH_VALUE;
+    hash_t hash = GENERIC_INITIAL_HASH_VALUE;
     uint8_t c;
     const char *username = credentials->username;
-    while ((c = *username++)) hash = ((hash << SHIFT_HASH_VALUE) + hash) + c; /* hash * 33 + c */
+    while ((c = *username++)) hash = ((hash << GENERIC_SHIFT_HASH_VALUE) + hash) + c; /* hash * 33 + c */
 
     return hash;
 }
