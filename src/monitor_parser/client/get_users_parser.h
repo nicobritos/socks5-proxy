@@ -12,12 +12,7 @@
  */
 #include <stdint.h>
 #include <stddef.h>
-
-typedef enum errors{
-    NO_ERROR,
-    INVALID_INPUT_FORMAT_ERROR,  // Si el datagrama no cumple el formato del RFC
-    REALLOC_ERROR,               // Si al hacer un realloc se produjo algun error
-}get_users_parser_error_t;
+#include "parser_errors.h"
 
 struct user {
     char * user;
@@ -27,7 +22,7 @@ struct user {
 struct users {
     struct user * users;
     size_t users_qty;
-    get_users_parser_error_t error;
+    parser_error_t error;
 };
 
 /**

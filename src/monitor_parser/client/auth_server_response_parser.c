@@ -11,7 +11,7 @@ void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
 
 struct auth_response *add_char_to_message(struct auth_response *ans, char c, size_t *message_current_length);
 
-struct auth_response *error(struct auth_response *ans, auth_server_parser_error_t error_type);
+struct auth_response *error(struct auth_response *ans, parser_error_t error_type);
 
 // definición de maquina
 
@@ -155,7 +155,7 @@ add_char_to_message(struct auth_response *ans, char c, size_t *message_current_l
     return ans;
 }
 
-struct auth_response *error(struct auth_response *ans, auth_server_parser_error_t error_type) {
+struct auth_response *error(struct auth_response *ans, parser_error_t error_type) {
     auth_response_free(ans);
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;

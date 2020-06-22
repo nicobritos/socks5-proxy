@@ -9,7 +9,7 @@
 /* Funciones auxiliares */
 void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
 
-struct metrics *error(struct metrics *ans, get_metrics_parser_error_t error_type);
+struct metrics *error(struct metrics *ans, parser_error_t error_type);
 
 // definición de maquina
 
@@ -223,7 +223,7 @@ void free_metrics(struct metrics *metrics) {
     }
 }
 
-struct metrics *error(struct metrics *ans, get_metrics_parser_error_t error_type) {
+struct metrics *error(struct metrics *ans, parser_error_t error_type) {
     free_metrics(ans);
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;
