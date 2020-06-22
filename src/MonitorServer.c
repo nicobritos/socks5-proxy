@@ -31,7 +31,7 @@ static char *user = "admin";
 static char *password = "adminadmin";
 static char buffer[MAX_BUFFER];
 static struct addrinfo *res;
-static struct socks5args   *args;
+static struct socks5args args;
 int listenSock;
 
 
@@ -58,11 +58,11 @@ static void server_init(){
 
     memset(&addr, 0, sizeof(addr));
     memset(&hint, 0, sizeof hint);
-    addr.sin_port  = htons(args->mng_port);
+    addr.sin_port  = htons(args.mng_port);
     hint.ai_family = AF_UNSPEC;
     hint.ai_flags  = AI_NUMERICHOST;
 
-    ret = getaddrinfo(args->mng_addr, NULL, &hint, &res);
+    ret = getaddrinfo(args.mng_addr, NULL, &hint, &res);
 
     if (ret) {
         printf("Invalid address\n");
@@ -71,13 +71,13 @@ static void server_init(){
     if (res->ai_family == AF_INET) {
         domain = AF_INET;
         addr.sin_family = AF_INET;
-        if (inet_pton(AF_INET, args->mng_addr, &addr.sin_addr) != 1) {
+        if (inet_pton(AF_INET, args.mng_addr, &addr.sin_addr) != 1) {
             exit(EXIT_FAILURE);
         }
     } else if (res->ai_family == AF_INET6) {
         domain = AF_INET6;
         addr.sin_family = AF_INET6;
-        if (inet_pton(AF_INET6, args->mng_addr, &addr.sin_addr) != 1) {
+        if (inet_pton(AF_INET6, args.mng_addr, &addr.sin_addr) != 1) {
             exit(EXIT_FAILURE);
         }
     } else {
@@ -89,19 +89,19 @@ static void server_init(){
 
     listenSock = socket(domain, SOCK_STREAM, IPPROTO_SCTP);
 
-    if (listenSock < 0) {
-        fprintf(stderr,"Error creating socket with the server using %s:%hu\n",address,port);
+    if(listenSock < 0) {
+        fprintf(stderr,"Error creating socket with the server using %s:%hu\n",args.mng_addr,args.mng_port);
         exit(EXIT_FAILURE);
     }
 
     setsockopt(listenSock, SOL_SOCKET, SO_REUSEADDR, &(int) {1}, sizeof(int));
 
-    if (bind(listenSock, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+    if(bind(listenSock, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
         fprintf(stderr,"Unable to bind socket\n");
         exit(EXIT_FAILURE);
     }
 
-    if (listen(listenSock, 1) < 0) {
+    if(listen(listenSock, 1) < 0) {
         fprintf(stderr,"Unable to listen\n");
         exit(EXIT_FAILURE);
     }
@@ -114,15 +114,14 @@ int main(int argc, char* argv[]){
     struct sctp_initmsg initmsg;
     struct sctp_event_subscribe events;
     struct sctp_sndrcvinfo sndrcvinfo;
-    char buffer[MAX_BUFFER + 1];
-
+    char buffer[MAX_BUFFER];
     parse_args(argc,argv,&args);
     server_init();
 
     while (1)
     {
         //Clear the buffer
-        bzero (buffer, MAX_BUFFER + 1);
+        bzero (buffer, MAX_BUFFER);
 
         printf ("Awaiting a new connection\n");
 
