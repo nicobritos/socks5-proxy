@@ -12,14 +12,19 @@
 #include <netinet/in.h>
 #include <netinet/sctp.h>
 #include <stdbool.h>
+#include <netdb.h>
+#include <limits.h>
+#include <arpa/inet.h>
+#include <errno.h>
+#include <getopt.h>
 
 #include "MonitorServer.h"
 
 #define MAX_BUFFER 1024
-#define MY_PORT_NUM 57610
+#define MY_PORT_NUM 57611
 
 char *address = "127.0.0.1";
-uint16_t port = 57610;
+uint16_t port = 57611;
 static bool logged = false;
 static char *user = "admin";
 static char *password = "adminadmin";
@@ -30,25 +35,17 @@ int listenSock;
 
 
 static bool authenticate_user(char *buffer){
-    printf("%d\n",strlen(buffer));
-    printf("%d\n",sizeof(buffer));
     uint8_t userRec[MAX_BUFFER];
     uint8_t passRec[MAX_BUFFER];
 
-
     strcpy(userRec,buffer+1);
-    printf("%s\n",userRec);
-
     strcpy(passRec,buffer+2+strlen(userRec));
-    printf("%s\n",passRec);
 
     if( strcmp(user,userRec) == 0){
         if(strcmp(password,passRec) == 0){
             logged = true;
         }
     }
-
-
     return logged;
 }
 
@@ -66,7 +63,7 @@ static void server_init(){
     ret = getaddrinfo(address, NULL, &hint, &res);
 
     if (ret) {
-        err_msg = "invalid address";
+        printf("Invalid address\n");
         exit(EXIT_FAILURE);
     }
     if (res->ai_family == AF_INET) {
@@ -83,7 +80,7 @@ static void server_init(){
         }
     } else {
         printf("Invalid address\n");
-        exit(EXIT_FAILURE)
+        exit(EXIT_FAILURE);
     }
 
     freeaddrinfo(res);
@@ -110,67 +107,12 @@ static void server_init(){
 
 
 int main(int argc, char* argv[]){
-    server_init();
-
-    while(1){
-
-    }
-
-}
-int main(){
     int connSock, ret, in, flags, i;
     struct sockaddr_in servaddr;
     struct sctp_initmsg initmsg;
     struct sctp_event_subscribe events;
     struct sctp_sndrcvinfo sndrcvinfo;
     char buffer[MAX_BUFFER + 1];
-
-    // listenSock = socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP);
-    // if(listenSock == -1)
-    // {
-    //     printf("Failed to create socket\n");
-    //     perror("socket()");
-    //     exit(1);
-    // }
-
-    // bzero((void *) &servaddr, sizeof (servaddr));
-    // servaddr.sin_family = AF_INET;
-    // servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    // servaddr.sin_port = htons(MY_PORT_NUM);
-
-    // ret = bind(listenSock, (struct sockaddr *) &servaddr, sizeof (servaddr));
-
-    // if(ret == -1 )
-    // {
-    //     printf("Bind failed \n");
-    //     perror("bind()");
-    //     close(listenSock);
-    //     exit(1);
-    // }
-
-    // /* Specify that a maximum of 5 streams will be available per socket */
-    // memset (&initmsg, 0, sizeof (initmsg));
-    // initmsg.sinit_num_ostreams = 5;
-    // initmsg.sinit_max_instreams = 5;
-    // initmsg.sinit_max_attempts = 4;
-    // ret = setsockopt(listenSock, IPPROTO_SCTP, SCTP_INITMSG, &initmsg, sizeof (initmsg));
-
-    // if(ret == -1 )
-    // {
-    //     printf("setsockopt() failed \n");
-    //     perror("setsockopt()");
-    //     close(listenSock);
-    //     exit(1);
-    // }
-
-    // ret = listen (listenSock, 5);
-    // if(ret == -1 )
-    // {
-    //     printf("listen() failed \n");
-    //     perror("listen()");
-    //     close(listenSock);
-    //     exit(1);
-    // }
 
     server_init();
 
