@@ -233,7 +233,7 @@ void request_parser_close(struct request_parser *p) {
  */
 int request_parser_write_response(
         buffer *buffer,
-        const struct sockaddr_storage *server_addr,
+        const struct sockaddr_storage *client_addr,
         const uint8_t reply)
 {
     size_t n;
@@ -241,42 +241,52 @@ int request_parser_write_response(
     struct sockaddr_in *in;
     struct sockaddr_in6 *in6;
 
-    uint16_t length = MIN_REPLY_SIZE + (server_addr->ss_family == AF_INET ? IPV4_LENGTH : IPV6_LENGTH);
+    uint16_t length = MIN_REPLY_SIZE + (client_addr->ss_family == AF_INET ? IPV4_LENGTH : IPV6_LENGTH);
     if (n < length) return -1;
 
     uint16_t i = 0;
-    int16_t address_i;
-    uint32_t ip;
+    uint16_t address_i = 0;
 
     buff[i++] = VALID_VERSION;
     buff[i++] = reply;
     buff[i++] = VALID_RESERVED;
 
-    if (server_addr->ss_family == AF_INET) {
-        in = (struct sockaddr_in *) server_addr;
+    if (client_addr->ss_family != AF_INET6) {
+        in = (struct sockaddr_in *) client_addr;
         buff[i++] = REQUEST_ATYP_IPV4;
 
-        ip = ntohl(in->sin_addr.s_addr);
-        address_i = IPV4_LENGTH - 1;
-        while (address_i >= 0) {
-            buff[i++] = (ip >> (8u * address_i)) & 0xFFu;
-            address_i--;
+        /**
+         * No importa la IP. Si indicamos 0.0.0.0 entonces el cliente entiendie
+         * que la IP bindeada al mismo es la misma IP que uso para conectarse
+         * a este servidor
+         * @see https://stackoverflow.com/questions/39990056/why-server-reply-of-socks5-protocol-can-use-dummy-values
+         */
+        while (address_i < IPV4_LENGTH) {
+            buff[i++] = 0;
+            address_i++;
         }
 
-        buff[i++] = (in->sin_port >> 8u);
-        buff[i++] = (in->sin_port & 0xFFu);
+        uint16_t port = htons(in->sin_port);
+        buff[i++] = port >> 8u;
+        buff[i] = port & 0xFFu;
     } else {
-        in6 = (struct sockaddr_in6 *) server_addr;
+        in6 = (struct sockaddr_in6 *) client_addr;
         buff[i++] = REQUEST_ATYP_IPV6;
 
-        address_i = IPV6_LENGTH - 1;
-        while (address_i >= 0) {
-            buff[i++] = in6->sin6_addr.s6_addr[address_i];
-            address_i--;
+        /**
+         * No importa la IP. Si indicamos 0.0.0.0 entonces el cliente entiende
+         * que la IP bindeada al mismo es la misma IP que uso para conectarse
+         * a este servidor
+         * @see https://stackoverflow.com/questions/39990056/why-server-reply-of-socks5-protocol-can-use-dummy-values
+         */
+        while (address_i < IPV6_LENGTH) {
+            buff[i++] = 0;
+            address_i++;
         }
 
-        buff[i++] = (in6->sin6_port >> 8u);
-        buff[i++] = (in6->sin6_port & 0xFFu);
+        uint16_t port = htons(in6->sin6_port);
+        buff[i++] = port >> 8u;
+        buff[i] = port & 0xFFu;
     }
 
     buffer_write_adv(buffer, length);
