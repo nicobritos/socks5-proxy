@@ -7,11 +7,8 @@
 #include <assert.h>  // assert
 #include <errno.h>
 #include <unistd.h>  // close
-#include <pthread.h>
 
 #include <arpa/inet.h>
-#include <netdb.h>
-#include <signal.h>
 
 #include "message/parser/hello_parser.h"
 #include "message/parser/auth_user_pass_parser.h"
@@ -206,13 +203,21 @@ struct request_st {
     int *server_fd;
 };
 
-/** Request connecting */
-struct connecting {
-    buffer *write_buffer;
-    const int *client_fd;
-    int *server_fd;
-    enum socks_response_status *status;
-};
+//struct udp_request_st {
+//    buffer *read_buffer;
+//    buffer *write_buffer;
+//
+//    /** aqui guardamos la info de la request (address, port, cmd) */
+//    const struct tcp_request request;
+//    /** parser */
+//    struct request_parser parser;
+//
+//    /** status, campo de reply */
+//    enum socks_response_status status;
+//
+//    const int *client_fd;
+//    int *server_fd;
+//};
 
 /** COPY */
 struct copy {
@@ -268,7 +273,6 @@ struct socks5 {
 
     /** estados para el server_fd */
     union {
-        struct connecting connecting;
         struct copy copy;
     } server;
 
@@ -282,7 +286,7 @@ struct socks5 {
     uint64_t bytes_uploaded;
 
     /** cantidad de referencias a este objecto. == 1 -> eliminar */
-    unsigned references;
+    uint32_t references;
 
     /** siguiente en pool */
     struct socks5 *next;
@@ -363,12 +367,12 @@ static void request_resolve_read_init(unsigned state, struct selector_key *key);
 static unsigned request_resolve_read(struct selector_key *key);
 static void request_resolve_read_close(unsigned state, struct selector_key *key);
 static unsigned request_resolve_connect_write(struct selector_key *key);
+static void request_write_init(const unsigned int state, struct selector_key *key);
 static unsigned request_resolve_write(struct selector_key *key);
 static unsigned request_resolve_process(struct selector_key *key, struct request_st *d);
 static unsigned request_resolve_set_address(struct selector_key *key, struct doh_response *doh);
 
 /** ---------------- REQUEST CONNECTING ---------------- */
-static void request_connecting_init(unsigned state, struct selector_key *key);
 static unsigned request_connecting_write(struct selector_key *key);
 
 /** ---------------- COPY ---------------- */
@@ -413,10 +417,10 @@ static const struct state_definition client_statbl[] = {
                 .on_departure = request_resolve_read_close
         }, {
                 .state = REQUEST_CONNECT,
-                .on_arrival = request_connecting_init,
                 .on_write_ready = request_connecting_write
         }, {
                 .state = REQUEST_WRITE,
+                .on_arrival = request_write_init,
                 .on_write_ready = request_write,
                 .on_departure = request_write_close
         }, {
@@ -440,12 +444,16 @@ void socksv5_init() {
 
 void socksv5_pool_destroy() {
     struct socks5 *next, *s;
+
     for (s = pool; s != NULL; s = next) {
         next = s->next;
         free(s);
     }
-    close_log(logger);
-    logger = NULL;
+
+    if (logger != NULL) {
+        close_log(logger);
+        logger = NULL;
+    }
 }
 
 /** Intenta aceptar la nueva conexión entrante*/
@@ -623,12 +631,22 @@ static void socksv5_close(struct selector_key *key) {
 }
 
 static void socksv5_done(struct selector_key* key) {
+    /**
+     * Cuando hacemos close_fd_ no sabemos si ya se libero el
+     * socket, entonces nos guardamos las referencias. Si es 0
+     * entonces ya fue liberado.
+     */
+    uint32_t references = ATTACHMENT(key)->references;
     if (ATTACHMENT(key)->client_fd != -1) {
         close_fd_(ATTACHMENT(key)->client_fd, key);
+        references--;
+        if (references == 0) return;
         ATTACHMENT(key)->client_fd = -1;
     }
     if (ATTACHMENT(key)->server_fd != -1) {
         close_fd_(ATTACHMENT(key)->server_fd, key);
+        references--;
+        if (references == 0) return;
         ATTACHMENT(key)->server_fd = -1;
     }
 }
@@ -1028,6 +1046,17 @@ static unsigned request_connect(struct selector_key *key, struct request_st *d) 
     return REQUEST_CONNECT;
 }
 
+static void request_write_init(const unsigned state, struct selector_key *key) {
+    struct request_st *d = &ATTACHMENT(key)->client_request;
+
+    if (request_parser_write_response(d->write_buffer, &ATTACHMENT(key)->client_addr, d->status) == -1) {
+        abort();
+    }
+
+    selector_set_interest(key->s, *d->client_fd, OP_WRITE);
+    selector_set_interest(key->s, *d->server_fd, OP_NOOP);
+}
+
 static unsigned request_write(struct selector_key *key) {
     struct request_st *d = &ATTACHMENT(key)->client_request;
     unsigned ret = REQUEST_READ;
@@ -1398,35 +1427,22 @@ static void request_resolve_read_close(const unsigned state, struct selector_key
 }
 
 /** ---------------- REQUEST CONNECTING ---------------- */
-static void request_connecting_init(const unsigned state, struct selector_key *key) {
-    struct connecting *d = &ATTACHMENT(key)->server.connecting;
-
-    d->client_fd = &ATTACHMENT(key)->client_fd;
-    d->server_fd = &ATTACHMENT(key)->server_fd;
-    d->status = &ATTACHMENT(key)->client_request.status;
-    d->write_buffer = &ATTACHMENT(key)->write_buffer;
-}
-
 static unsigned request_connecting_write(struct selector_key *key) {
     int error;
     socklen_t len = sizeof(error);
-    struct connecting *d = &ATTACHMENT(key)->server.connecting;
+    struct request_st *d = &ATTACHMENT(key)->client_request;
 
     if (getsockopt(key->fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
-        *d->status = socks_status_general_SOCKS_server_failure;
+        d->status = socks_status_general_SOCKS_server_failure;
     } else {
         if (error == 0) {
-            *d->status = socks_status_succeeded;
-            *d->server_fd = key->fd;
+            d->status = socks_status_succeeded;
+            ATTACHMENT(key)->server_fd = key->fd;
         } else {
-            *d->status = errno_to_socks(error);
+            d->status = errno_to_socks(error);
         }
     }
 
-    if (request_parser_write_response(d->write_buffer, &ATTACHMENT(key)->server_addr, *d->status) == -1) {
-        *d->status = socks_status_general_SOCKS_server_failure;
-        abort();
-    }
     selector_status s = 0;
     s |= selector_set_interest(key->s, *d->client_fd, OP_WRITE);
     s |= selector_set_interest(key->s, *d->server_fd, OP_NOOP);

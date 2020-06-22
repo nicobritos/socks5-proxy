@@ -1,7 +1,3 @@
-//
-// Created by Nico on 009, June 9, 2020.
-//
-
 #include "request_parser.h"
 
 #include <stdlib.h>
