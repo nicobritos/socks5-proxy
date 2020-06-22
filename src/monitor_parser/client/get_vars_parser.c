@@ -16,6 +16,8 @@ struct vars *error(struct vars *ans, parser_error_t error_type);
 enum states {
     ST_VCODE,
     ST_IO_TIMEOUT_VALUE,
+    ST_LMODE_VALUE,
+    ST_LMODE_END,
     ST_END,
     ST_INVALID_INPUT_FORMAT,
 };
@@ -23,6 +25,7 @@ enum states {
 enum event_type {
     SUCCESS,
     COPY_IO_TIMEOUT,
+    COPY_LMODE,
     END_T,
     INVALID_INPUT_FORMAT_T,
 };
@@ -37,6 +40,13 @@ next_state(struct parser_event *ret, const uint8_t c) {
 static void
 copy_io_timeout(struct parser_event *ret, const uint8_t c) {
     ret->type = COPY_IO_TIMEOUT;
+    ret->n = 1;
+    ret->data[0] = c;
+}
+
+static void
+copy_lmode(struct parser_event *ret, const uint8_t c) {
+    ret->type = COPY_LMODE;
     ret->n = 1;
     ret->data[0] = c;
 }
@@ -58,6 +68,7 @@ invalid_input(struct parser_event *ret, const uint8_t c) {
 static const struct parser_state_transition VCODE[] = {
     {.when = '\0', .dest = ST_END, .act1 = end,},
     {.when = '\1', .dest = ST_IO_TIMEOUT_VALUE, .act1 = next_state,},
+    {.when = '\2', .dest = ST_LMODE_VALUE, .act1 = next_state,},
     {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
 
@@ -76,6 +87,20 @@ static const struct parser_state_transition IO_TIMEOUT_VALUE[] = {
     {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
 
+static const struct parser_state_transition LMODE_VALUE[] = {
+    {.when = '\0', .dest = ST_VCODE, .act1 = next_state,},
+    {.when = '1', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+    {.when = '2', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+    {.when = '3', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+    {.when = '4', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+    {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
+};
+
+static const struct parser_state_transition LMODE_END[] = {
+    {.when = '\0', .dest = ST_VCODE, .act1 = next_state,},
+    {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
+};
+
 static const struct parser_state_transition END[] = {
     {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
@@ -87,6 +112,8 @@ static const struct parser_state_transition INVALID_INPUT_FORMAT[] = {
 static const struct parser_state_transition *states[] = {
     VCODE,
     IO_TIMEOUT_VALUE,
+    LMODE_VALUE,
+    LMODE_END,
     END,
     INVALID_INPUT_FORMAT,
 };
@@ -96,6 +123,8 @@ static const struct parser_state_transition *states[] = {
 static const size_t states_n[] = {
     N(VCODE),
     N(IO_TIMEOUT_VALUE),
+    N(LMODE_VALUE),
+    N(LMODE_END),
     N(END),
     N(INVALID_INPUT_FORMAT),
 };
@@ -118,6 +147,9 @@ struct vars * get_vars_parser(uint8_t *s, size_t length) {
             case COPY_IO_TIMEOUT:
                 ans->io_timeout *= 10;
                 ans->io_timeout += s[i] - '0';
+            break;
+            case COPY_LMODE:
+                ans->lmode += s[i] - '0';
             break;
             case END_T:
                 finished = 1;
@@ -163,7 +195,7 @@ void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
  *     4. Run in the terminal "afl-fuzz -i parser_test_case -o afl-output -- ./auth_server_response_parser @@"
  */
 
-/*
+
 int main(int argc, char ** argv){
     FILE * fp;
     int16_t c;
@@ -196,9 +228,9 @@ int main(int argc, char ** argv){
     if(ans->error != NO_ERROR){
         printf("error\n");
     } else {
-        printf("IO Timeout = %u\n", ans->io_timeout);
+        printf("IO Timeout = %zu\n", ans->io_timeout);
+        printf("Logger Severity = %u\n", ans->lmode);
     }
     free_vars(ans);
     return 0;
 }
-*/

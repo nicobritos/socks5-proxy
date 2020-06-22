@@ -12,8 +12,16 @@
 #include <stddef.h>
 #include "../parser_errors.h"
 
+typedef enum{
+    DEBUG,
+    INFO,
+    WARNING,
+    ERROR,
+} logger_severity_mode;
+
 struct vars {
     size_t io_timeout;
+    logger_severity_mode lmode;
     parser_error_t error;
 };
 
