@@ -19,6 +19,7 @@
 #include <getopt.h>
 
 #include "MonitorServer.h"
+#include "args.h"
 
 #define MAX_BUFFER 1024
 #define MY_PORT_NUM 57611
@@ -30,6 +31,7 @@ static char *user = "admin";
 static char *password = "adminadmin";
 static char buffer[MAX_BUFFER];
 static struct addrinfo *res;
+static struct socks5args   *args;
 int listenSock;
 
 
@@ -56,11 +58,11 @@ static void server_init(){
 
     memset(&addr, 0, sizeof(addr));
     memset(&hint, 0, sizeof hint);
-    addr.sin_port  = htons(port);
+    addr.sin_port  = htons(args->mng_port);
     hint.ai_family = AF_UNSPEC;
     hint.ai_flags  = AI_NUMERICHOST;
 
-    ret = getaddrinfo(address, NULL, &hint, &res);
+    ret = getaddrinfo(args->mng_addr, NULL, &hint, &res);
 
     if (ret) {
         printf("Invalid address\n");
@@ -69,13 +71,13 @@ static void server_init(){
     if (res->ai_family == AF_INET) {
         domain = AF_INET;
         addr.sin_family = AF_INET;
-        if (inet_pton(AF_INET, address, &addr.sin_addr) != 1) {
+        if (inet_pton(AF_INET, args->mng_addr, &addr.sin_addr) != 1) {
             exit(EXIT_FAILURE);
         }
     } else if (res->ai_family == AF_INET6) {
         domain = AF_INET6;
         addr.sin_family = AF_INET6;
-        if (inet_pton(AF_INET6, address, &addr.sin_addr) != 1) {
+        if (inet_pton(AF_INET6, args->mng_addr, &addr.sin_addr) != 1) {
             exit(EXIT_FAILURE);
         }
     } else {
@@ -114,6 +116,7 @@ int main(int argc, char* argv[]){
     struct sctp_sndrcvinfo sndrcvinfo;
     char buffer[MAX_BUFFER + 1];
 
+    parse_args(argc,argv,&args);
     server_init();
 
     while (1)
