@@ -88,7 +88,7 @@ static void requestToServer(const uint8_t *request, const uint8_t reqlen, uint8_
         *reqflag = false;
         return;
     } 
-    ret = sctp_recvmsg (sd, response, 10,(struct sockaddr *) NULL, 0,&sndrcvinfo, &flags);
+    ret = sctp_recvmsg (sd, response, reslen,(struct sockaddr *) NULL, 0,&sndrcvinfo, &flags);
     if(ret == -1 || ret == 0){
         *resflag = false;
         return;
@@ -123,7 +123,7 @@ static bool authenticate_user(const char *username, const char *password){
     bool *dflag = true;
     bool *aflag = true;
 
-    requestToServer(datagram,datalen,answer,sizeof(uint8_t) * ANSWER_MAX_LENGTH,&dflag,&aflag);
+    int ret = requestToServer(datagram,datalen,answer,sizeof(uint8_t) * ANSWER_MAX_LENGTH,&dflag,&aflag);
 
     if(!dflag){
         printf("Error sending authentication request\n");
@@ -143,7 +143,7 @@ static bool authenticate_user(const char *username, const char *password){
     +--------+----------+
     */
 
-    struct auth_response * ans = auth_response_parser(answer, strlen(answer)+1);
+    struct auth_response * ans = auth_response_parser(answer, ret+1);
     if(ans->error != 0){
         printf("error\n");
     } else {
@@ -281,7 +281,7 @@ static void establish_connection(){
     }
 }
 
-static void get_metrics(){
+static void get_command(const int code){
 
     /* REQUEST
     +--------+
@@ -293,15 +293,47 @@ static void get_metrics(){
 
     const int DATAGRAM_MAX_LENGTH = 1;
     uint8_t datagram[DATAGRAM_MAX_LENGTH];
-    datagram[0] = 0x01;
+    datagram[0] = code;
 
-    const int ANSWER_MAX_LENGTH = 12;
+    const int ANSWER_MAX_LENGTH = 255;
     uint8_t answer[ANSWER_MAX_LENGTH];
 
     bool *dflag = true;
     bool *aflag = true;
 
-    requestToServer(datagram, sizeof(uint8_t) * DATAGRAM_MAX_LENGTH, answer, sizeof(uint8_t) * ANSWER_MAX_LENGTH, &dflag, &aflag);
+    int ret = requestToServer(datagram, sizeof(uint8_t) * DATAGRAM_MAX_LENGTH, answer, sizeof(uint8_t) * ANSWER_MAX_LENGTH, &dflag, &aflag);
+
+    if(!dflag){
+       printf("Error sending metrics request\n");
+    }
+
+    if(!aflag){
+       printf("Error receiving metrics response\n");
+    }
+
+    switch (code){
+        case 0x01:
+            get_metrics(answer,ret);
+            break;
+        case 0x02:
+            get_users(answer,ret)
+            break;
+        case 0x03:
+            get_access_log(answer,ret);
+            break;
+        case 0x04:
+            get_passwords(answer,ret);
+            break;
+        case 0x05:
+            get_vars(answer,ret);
+        default:
+            break;
+    }
+
+
+}
+
+static void get_metrics(char *response, int length){
 
     /* RESPONSE
     +----------+----------+----------+
@@ -311,15 +343,7 @@ static void get_metrics(){
     +----------+----------+----------+
     */
 
-   if(!dflag){
-       printf("Error sending metrics request\n");
-   }
-
-   if(!aflag){
-       printf("Error receiving metrics response\n");
-   }
-
-    struct metrics * ans = get_metrics_parser(answer, strlen(answer)+1);
+    struct metrics * ans = get_metrics_parser(response, length+1);
     if(ans->error != NO_ERROR){
         printf("error\n");
     } else {
@@ -329,27 +353,7 @@ static void get_metrics(){
     }
 }
 
-static void get_users(){
-
-    /* REQUEST
-    +--------+
-    |  CODE  |
-    +--------+
-    |   1    |
-    +--------+
-    */
-
-    const int DATAGRAM_MAX_LENGTH = 1;
-    uint8_t datagram[DATAGRAM_MAX_LENGTH];
-    datagram[0] = 0x02;
-
-    const int ANSWER_MAX_LENGTH = 255;
-    uint8_t answer[ANSWER_MAX_LENGTH];
-
-    bool *dflag = true;
-    bool *aflag = true;
-
-    requestToServer(datagram, sizeof(uint8_t) * DATAGRAM_MAX_LENGTH, answer, sizeof(uint8_t) * ANSWER_MAX_LENGTH, &dflag, &aflag);
+static void get_users(char *response, int length){
 
     /* RESPONSE
     +------------+------------+
@@ -359,7 +363,7 @@ static void get_users(){
     +------------+------------+
     */
 
-    struct users * ans = get_users_parser(buffer, i);
+    struct users * ans = get_users_parser(response, length+1);
     if(ans->error != NO_ERROR){
         printf("error\n");
     } else {
@@ -368,8 +372,80 @@ static void get_users(){
             printf("User: %s\tStatus: %d\n", ans->users[i].user, ans->users[i].status);
         }
     }
+}
 
+static void get_access_log(char *response, int length){
 
+    /* RESPONSE
+    +----------+----------+-------+----------+----------+----------+----------+----------+
+    |   TIME   |   USER   | RTYPE |   OIP    |  OPORT   |   DEST   |  DPORT   |  STATUS  |
+    +----------+----------+-------+----------+----------+----------+----------+----------+
+    | Variable | Variable |   1   | Variable | Variable | Variable | Variable |    1     |
+    +----------+----------+-------+----------+----------+----------+----------+----------+
+    */
+
+   struct access_log * ans = get_access_log_parser(response, length+1);
+    if(ans->error != NO_ERROR){
+        printf("error\n");
+    } else {
+        printf("%zu entries:\n", ans->entry_qty);
+        for(int i = 0; i<ans->entry_qty; i++){
+            printf("\nEntry %d\n", i);
+            printf("\tTime: %s\n",ans->entries[i].time);
+            printf("\tUser: %s\n",ans->entries[i].user.user);
+            printf("\tOrigin IP: %s\n",ans->entries[i].origin_ip);
+            printf("\tOrigin port: %d\n",ans->entries[i].origin_port);
+            printf("\tDestination: %s\n",ans->entries[i].destination);
+            printf("\tDestination port: %d\n",ans->entries[i].destination_port);
+            printf("\tStatus: %u\n",ans->entries[i].user.status);
+        }
+    }
+}
+
+static void get_passwords(char *response, int length){
+
+    /*
+    +----------+----------+-------+----------+----------+----------+----------+----------+
+    |   TIME   |   USER   | RTYPE | PROTOCOL |   DEST   |  DPORT   |   ULOG   | PASSWORD |
+    +----------+----------+-------+----------+----------+----------+----------+----------+
+    | Variable | Variable |   1   | Variable | Variable | Variable | Variable | Variable |
+    +----------+----------+-------+----------+----------+----------+----------+----------+
+    */
+
+   struct passwords * ans = get_passwords_parser(response, length+1);
+    if(ans->error != NO_ERROR){
+        printf("error\n");
+    } else {
+        printf("%zu entries:\n", ans->entry_qty);
+        for(int i = 0; i<ans->entry_qty; i++){
+            printf("\nEntry %d\n", i);
+            printf("\tTime: %s\n",ans->entries[i].time);
+            printf("\tUser: %s\n",ans->entries[i].user);
+            printf("\tProtocol: %s\n",ans->entries[i].protocol);
+            printf("\tDestination: %s\n",ans->entries[i].destination);
+            printf("\tDestination port: %d\n",ans->entries[i].destination_port);
+            printf("\tUsername: %s\n",ans->entries[i].username);
+            printf("\tPassword: %s\n",ans->entries[i].password);
+        }
+    }
+}
+
+static void get_vars(char *response, int length){
+
+    /*
+    +-------+----------+
+    | VCODE |  VVALUE  |
+    +-------+----------+
+    |   1   | Variable |
+    +-------+----------+
+    */
+
+   struct vars * ans = get_vars_parser(response, length+1);
+    if(ans->error != NO_ERROR){
+        printf("error\n");
+    } else {
+        printf("IO Timeout = %u\n", ans->io_timeout);
+    }
 }
 
 static void get_menu_option(){
@@ -393,21 +469,17 @@ static void get_menu_option(){
 
     switch(ret){
         case 1:
-            get_metrics();
-            break;
         case 2:
-            get_users();
-            break;
         case 3:
-            //get_access_log();
-            break;
         case 4:
-            //get_passwords();
-            break;
         case 5:
-            //get_vars();
+            get_command(ret);
             break;
-        
+        case 6:
+            set_user();
+            break;
+        case 7:
+            set_var();
         default:
             printf("Error: Invalid option: %lu \n Please try again with a valid option.",ret);
         break;
