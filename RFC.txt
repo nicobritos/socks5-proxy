@@ -199,11 +199,14 @@ Configure and Monitor for SOCKS V5 Server
 
 	                Request
 
-           +------+----------+
-           | CODE |  VVALUE  | 
-           +------+----------+
-           |  1   | Variable |  
-           +------+----------+
+           +------+-------+----------+
+           | CODE | VCODE |  VVALUE  | 
+           +------+-------+----------+
+           |  1   |   1   | Variable |  
+           +------+-------+----------+
 
+        o   VCODE - Reference to Var
+        		+ I/0 TIMEOUT - Code 0x01
+                
         o   VVALUE
         	+ I/0 TIMEOUTS is size_t big endian
