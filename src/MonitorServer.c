@@ -149,7 +149,6 @@ int main(){
                 }
                 int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t)*strlen(response),NULL, 0, 0, 0, 0, 0, 0);
                 if(ret == -1){
-                    //ERROR
                     printf("Error sending message\n");
                 }
             }

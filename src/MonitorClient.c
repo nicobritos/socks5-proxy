@@ -55,11 +55,9 @@ static void get_address_information();
 
 static void establish_connection();
 
-static void get_metric();
+static void get_metrics();
 
 static void get_menu_option();
-
-static void get_metrics_menu();
 
 static void finish_connection();
 
@@ -148,12 +146,13 @@ static bool authenticate_user(const char *username, const char *password){
     struct auth_response * ans = auth_response_parser(answer, strlen(answer)+1);
     if(ans->error != 0){
         printf("error\n");
-        return false;
     } else {
-        // printf("%u\n", ans->status);
         printf("%s\n", ans->message);
-        return true;
+        if(ans->status == 0x01){
+            return true;
+        }
     }
+    return false;
 }
 
 
@@ -197,7 +196,6 @@ static void start_connection(int argc, char *argv[]){
     get_address_information();
         
     establish_connection();
-
 }
 
 static uint16_t parse_port(const char *s) {
@@ -283,7 +281,7 @@ static void establish_connection(){
     }
 }
 
-static void get_metric(){
+static void get_metrics(){
 
     /* REQUEST
     +--------+
@@ -293,7 +291,7 @@ static void get_metric(){
     +--------+
     */
 
-   const int DATAGRAM_MAX_LENGTH = 1;
+    const int DATAGRAM_MAX_LENGTH = 1;
     uint8_t datagram[DATAGRAM_MAX_LENGTH];
     datagram[0] = 0x01;
 
@@ -321,14 +319,57 @@ static void get_metric(){
        printf("Error receiving metrics response\n");
    }
 
-    // struct metrics * ans = get_metrics_parser(answer, strlen(answer)+1);
-    // if(ans->error != NO_ERROR){
-    //     printf("error\n");
-    // } else {
-    //     printf("%u\n", ans->established_cons);
-    //     printf("%u\n", ans->actual_cons);
-    //     printf("%u\n", ans->bytes_transferred);
-    // }
+    struct metrics * ans = get_metrics_parser(answer, strlen(answer)+1);
+    if(ans->error != NO_ERROR){
+        printf("error\n");
+    } else {
+        printf("%u\n", ans->established_cons);
+        printf("%u\n", ans->actual_cons);
+        printf("%u\n", ans->bytes_transferred);
+    }
+}
+
+static void get_users(){
+
+    /* REQUEST
+    +--------+
+    |  CODE  |
+    +--------+
+    |   1    |
+    +--------+
+    */
+
+    const int DATAGRAM_MAX_LENGTH = 1;
+    uint8_t datagram[DATAGRAM_MAX_LENGTH];
+    datagram[0] = 0x02;
+
+    const int ANSWER_MAX_LENGTH = 255;
+    uint8_t answer[ANSWER_MAX_LENGTH];
+
+    bool *dflag = true;
+    bool *aflag = true;
+
+    requestToServer(datagram, sizeof(uint8_t) * DATAGRAM_MAX_LENGTH, answer, sizeof(uint8_t) * ANSWER_MAX_LENGTH, &dflag, &aflag);
+
+    /* RESPONSE
+    +------------+------------+
+    |    USER    |   STATUS   | 
+    +------------+------------+
+    |  Variable  |     1      |  
+    +------------+------------+
+    */
+
+    struct users * ans = get_users_parser(buffer, i);
+    if(ans->error != NO_ERROR){
+        printf("error\n");
+    } else {
+        printf("Users quantity: %zu\n", ans->users_qty);
+        for(int i = 0; i<ans->users_qty; i++){
+            printf("User: %s\tStatus: %d\n", ans->users[i].user, ans->users[i].status);
+        }
+    }
+
+
 }
 
 static void get_menu_option(){
@@ -352,10 +393,10 @@ static void get_menu_option(){
 
     switch(ret){
         case 1:
-            //get_metrics();
+            get_metrics();
             break;
         case 2:
-            //get_users();
+            get_users();
             break;
         case 3:
             //get_access_log();
