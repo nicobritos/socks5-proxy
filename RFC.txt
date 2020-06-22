@@ -40,11 +40,11 @@ Configure and Monitor for SOCKS V5 Server
 
     			        Request
 
-                        +--------+
-                        |  CODE  |
-                        +--------+
-                        |   1    |
-                        +--------+
+                        +------+
+                        | CODE |
+                        +------+
+                        |  1   |
+                        +------+
 
                         Response
 
@@ -63,11 +63,11 @@ Configure and Monitor for SOCKS V5 Server
 
     					Request
 
-                        +--------+
-                        |  CODE  |
-                        +--------+
-                        |   1    |
-                        +--------+
+                        +------+
+                        | CODE |
+                        +------+
+                        |  1   |
+                        +------+
 
                         Response
 
@@ -88,24 +88,23 @@ Configure and Monitor for SOCKS V5 Server
 	'Juan\0\1Gianfranco\0\1Nicolas\0\1Ignacio\0\1Agustin\0\1\0' 
 
 
-
 	-GET ACCESS LOG - Code 0x03
 
-    					Request
+                                            Request
 
-                        +--------+
-                        |  CODE  |
-                        +--------+
-                        |   1    |
-                        +--------+
+                                            +------+
+                                            | CODE |
+                                            +------+
+                                            |  1   |
+                                            +------+
 
-                        Response
+                                            Response
 
-         +------------+------------+-------+------------+------------+------------+------------+------------+
-         |    TIME    |    USER    | RTYPE |    OIP     |    OPORT   |    DEST    |    DPORT   |    STATUS  |
-         +------------+------------+-------+------------+------------+------------+------------+------------+
-         |  Variable  |  Variable  |   1   |  Variable  |  Variable  |  Variable  |  Variable  |      1     |
-         +------------+------------+-------+------------+------------+------------+------------+------------+
+         +----------+----------+-------+----------+----------+----------+----------+----------+
+         |   TIME   |   USER   | RTYPE |   OIP    |  OPORT   |   DEST   |  DPORT   |  STATUS  |
+         +----------+----------+-------+----------+----------+----------+----------+----------+
+         | Variable | Variable |   1   | Variable | Variable | Variable | Variable |    1     |
+         +----------+----------+-------+----------+----------+----------+----------+----------+
 
      	TIME, USER,RTYPE,OIP, OPORT, DEST, DPORT are null terminated strings
         TIME is in format ISO-8601
@@ -122,21 +121,21 @@ Configure and Monitor for SOCKS V5 Server
 
 	-GET PASSWORDS - Code 0x04
 
-    					Request
+                                                Request
 
-                        +--------+
-                        |  CODE  |
-                        +--------+
-                        |   1    |
-                        +--------+
+                                                +------+
+                                                | CODE |
+                                                +------+
+                                                |  1   |
+                                                +------+
 
-                        Response
+                                                Response
 
-         +------------+------------+-------+------------+------------+------------+------------+------------+
-         |    TIME    |    USER    | RTYPE |  PROTOCOL  |    DEST    |    DPORT   |    ULOG    |  PASSWORD  |
-         +------------+------------+-------+------------+------------+------------+------------+------------+
-         |  Variable  |  Variable  |   1   |  Variable  |   Variable |   Variable |   Variable |  Variable  |
-         +------------+------------+-------+------------+------------+------------+------------+------------+
+         +----------+----------+-------+----------+----------+----------+----------+----------+
+         |   TIME   |   USER   | RTYPE | PROTOCOL |   DEST   |  DPORT   |   ULOG   | PASSWORD |
+         +----------+----------+-------+----------+----------+----------+----------+----------+
+         | Variable | Variable |   1   | Variable | Variable | Variable | Variable | Variable |
+         +----------+----------+-------+----------+----------+----------+----------+----------+
 
      	TIME, USER,RTYPE,PROTOCOL, DEST,DPORT, ULOG are null terminated strings
      	USER - Requesting user
@@ -151,25 +150,23 @@ Configure and Monitor for SOCKS V5 Server
      2020-06-15T19:12:12Z\0Juan\0P\0POP3\0www.itba.edu.ar\0110\0Gianfranco\0\pass\0\0\0'
 
         
-
-
 	-GET VARS - Code 0x05
 
-    					Request
+                Request
 
-                        +--------+
-                        |  CODE  |
-                        +--------+
-                        |   1    |
-                        +--------+
+                +------+
+                | CODE |
+                +------+
+                |  1   |
+                +------+
 
-                        Response
+                Response
 
-           +------------+----------+
-           |    VCODE   |  VVALUE  |
-           +------------+----------+
-           |      1     | Variable |
-           +------------+----------+
+           +-------+----------+
+           | VCODE |  VVALUE  |
+           +-------+----------+
+           |   1   | Variable |
+           +-------+----------+
 
         o   VCODE - Reference to Var
         		+ I/0 TIMEOUT - Code 0x01
@@ -180,15 +177,16 @@ Configure and Monitor for SOCKS V5 Server
 
         o   VVALUE - Variable Value as string. It is null terminated
 
+
 	-SET USER - Code 0x06
 
-	                Request
+                    Request
 
-           +---------+------------+------------+
-           |   CODE  |    USER    |   MODE     | 
-           +---------+------------+------------+
-           |    1    |  Variable  |     1      |  
-           +---------+------------+------------+
+           +------+----------+------+
+           | CODE |   USER   | MODE | 
+           +------+----------+------+
+           |  1   | Variable |  1   |  
+           +------+----------+------+
 
         o   USER - user name
         o   MODE
@@ -201,11 +199,11 @@ Configure and Monitor for SOCKS V5 Server
 
 	                Request
 
-           +---------+------------+
-           |   CODE  |   VVALUE   | 
-           +---------+------------+
-           |    1    |  Variable  |  
-           +---------+------------+
+           +------+----------+
+           | CODE |  VVALUE  | 
+           +------+----------+
+           |  1   | Variable |  
+           +------+----------+
 
         o   VVALUE
         	+ I/0 TIMEOUTS is size_t big endian
