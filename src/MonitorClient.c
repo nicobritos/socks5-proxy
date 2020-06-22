@@ -18,11 +18,12 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <getopt.h>
+#include "monitor_parser/client/auth_server_response_parser.h"
 
 #include "MonitorClient.h"
 
 #define MAX_BUFFER 1024
-#define MY_PORT_NUM 62324
+#define MY_PORT_NUM 57610
 #define HISTORICAL_CONNECTION 1
 #define CONCURRENT_CONNECTIOS 2
 #define BYTES_TRANSFERRED 3
@@ -31,7 +32,7 @@
 #define METRIC_MENU 2
 static int sd = -1, rc;
 static char *address = "127.0.0.1";
-static uint16_t port = 62324;
+static uint16_t port = 57610;
 static struct addrinfo *res;
 static bool logged = false;
 static char buffer[MAX_BUFFER];
@@ -54,7 +55,7 @@ static void get_address_information();
 
 static void establish_connection();
 
-static void get_metric(int metric);
+static void get_metric();
 
 static void get_menu_option();
 
@@ -89,7 +90,7 @@ static void requestToServer(const uint8_t *request, const uint8_t reqlen, uint8_
         *reqflag = false;
         return;
     } 
-    ret = sctp_recvmsg (sd, response, 2,(struct sockaddr *) NULL, 0,&sndrcvinfo, &flags);
+    ret = sctp_recvmsg (sd, response, 10,(struct sockaddr *) NULL, 0,&sndrcvinfo, &flags);
     if(ret == -1 || ret == 0){
         *resflag = false;
         return;
@@ -116,23 +117,9 @@ static bool authenticate_user(const char *username, const char *password){
 
     datagram[0] = ver;
     strcpy(datagram+1,username);
-
     strcpy(datagram+(1+ulen+1),password);
 
-    // for(int i=0 ; i<ulen ; i++){
-    //     datagram[1 + i] = (uint8_t) username[i];
-    // }
-
-    // datagram[1 + ulen] = (uint8_t) '\0';
-
-    // for(int i=0 ; i<plen ; i++){
-    //     datagram[2 + ulen + i] = (uint8_t) password[i];
-    // }
-
-    // datagram[2 + ulen + plen] = (uint8_t) '\0';
-
-
-    const int ANSWER_MAX_LENGTH = (1 + 255);
+    const int ANSWER_MAX_LENGTH = (25);
     uint8_t answer[ANSWER_MAX_LENGTH];
 
     bool *dflag = true;
@@ -158,16 +145,15 @@ static bool authenticate_user(const char *username, const char *password){
     +--------+----------+
     */
 
-   //SEND TO PARSER
-    if(answer[0] == 0x01){
-        printf("User Authenticated!!\n");
-        //parsear message si es necesario        
+    struct auth_response * ans = auth_response_parser(answer, strlen(answer)+1);
+    if(ans->error != 0){
+        printf("error\n");
+        return false;
+    } else {
+        // printf("%u\n", ans->status);
+        printf("%s\n", ans->message);
         return true;
     }
-
-    /* Status distinto a 0 */
-    printf("User authentication failed\n");
-    return false;
 }
 
 
@@ -328,14 +314,21 @@ static void get_metric(){
     */
 
    if(!dflag){
-       printf("Error sending metrics request\n")
+       printf("Error sending metrics request\n");
    }
 
    if(!aflag){
        printf("Error receiving metrics response\n");
    }
 
-   //SEND TO PARSER
+    // struct metrics * ans = get_metrics_parser(answer, strlen(answer)+1);
+    // if(ans->error != NO_ERROR){
+    //     printf("error\n");
+    // } else {
+    //     printf("%u\n", ans->established_cons);
+    //     printf("%u\n", ans->actual_cons);
+    //     printf("%u\n", ans->bytes_transferred);
+    // }
 }
 
 static void get_menu_option(){
@@ -359,19 +352,19 @@ static void get_menu_option(){
 
     switch(ret){
         case 1:
-            get_metrics();
+            //get_metrics();
             break;
         case 2:
-            get_users();
+            //get_users();
             break;
         case 3:
-            get_access_log();
+            //get_access_log();
             break;
         case 4:
-            get_passwords();
+            //get_passwords();
             break;
         case 5:
-            get_vars();
+            //get_vars();
             break;
         
         default:

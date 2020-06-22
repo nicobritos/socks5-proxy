@@ -43,7 +43,7 @@ struct parser_state_transition {
 };
 
 /** predicado para utilizar en `when' que retorna siempre true */
-static const int ANY = 1u << 9u;
+#define ANY 1u << 9u
 
 /** declaraciÃ³n completa de una mÃ¡quina de estados */
 struct parser_definition {

@@ -16,7 +16,7 @@
 #include "MonitorServer.h"
 
 #define MAX_BUFFER 1024
-#define MY_PORT_NUM 62324
+#define MY_PORT_NUM 57610
 
 static bool logged = false;
 static char *user = "admin";
@@ -30,20 +30,20 @@ static bool authenticate_user(char *buffer){
     uint8_t userRec[MAX_BUFFER];
     uint8_t passRec[MAX_BUFFER];
 
-    strncpy(userRec,buffer+2,ulen);
-    userRec[ulen] = '\0';
+
+
+    strcpy(userRec,buffer+1);
     printf("%s\n",userRec);
 
-    strncpy(passRec,buffer+2+ulen+1,plen);
-    passRec[plen] = '\0';
+    strcpy(passRec,buffer+2+strlen(userRec));
     printf("%s\n",passRec);
 
     if( strcmp(user,userRec) == 0){
         if(strcmp(password,passRec) == 0){
-            return true;
+            logged = true;
         }
     }
-    return false;
+    return logged;
 }
 
 int main(){
@@ -130,33 +130,58 @@ int main(){
 
         }
         else{
-            buffer[in] = '\0';
-            if(buffer[0] == 0x01){
+            if(!logged){
+                uint8_t response[255];
                 bool userAuth = authenticate_user(buffer);
-                uint8_t response[2];
-                int length;
                 if(userAuth){
-                    printf("Username: %s has login!!\n",user);   
-                    response[0] = 0x00;  
-                    char *message = "Helloadmin";        
-                    length = strlen(message);      
-                    for(int i=0 ; i<length ; i++){
-                        response[1 + i] = (uint8_t) message[i];
-                    }
-                    response[1+length] = '\0';
+                    printf("%s has signned in!\n",user);
+                    response[0] = 0x01;
+                    char *welcome = "Welcome!";
+                    strcpy(response+1,welcome);
+                    response[1+strlen(welcome)] = '\0';
                 }
                 else{
-                    response[0] = 0x01;
+                    printf("Failed authentication\n");
+                    response[0] = 0x00;
+                    char *errorAuth = "Username or Password incorrect";
+                    strcpy(response+1,errorAuth);
+                    response[1+strlen(errorAuth)] = '\0';
                 }
-                int ret = sctp_sendmsg(connSock, (void *) response, (size_t) 1+length,NULL, 0, 0, 0, 0, 0, 0);
+                int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t)*strlen(response),NULL, 0, 0, 0, 0, 0, 0);
                 if(ret == -1){
                     //ERROR
                     printf("Error sending message\n");
                 }
             }
-            printf (" Length of Data received: %d\n", in);
-
-        }            
+            else{
+                uint8_t code = buffer[0];
+                switch(code){
+                    case 0x01:
+                        printf("GET_METRICS\n");
+                        // get_metrics();
+                        break;
+                    case 0x02:
+                        printf("GET_USERS\n");
+                        // get_users();
+                        break;
+                    case 0x03:
+                        printf("GET_ACCESS_LOG\n");
+                        // get_acces_log();
+                        break;
+                    case 0x04:
+                        printf("GET_PASSWORDS\n");
+                        // get_passwords();
+                        break;
+                    case 0x05:
+                        printf("GET_VARS\n");
+                        // get_vars();
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+        close(connSock);            
     }
     return 0;
 }
