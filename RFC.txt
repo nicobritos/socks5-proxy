@@ -169,7 +169,7 @@ Configure and Monitor for SOCKS V5 Server
            |    VCODE   |  VVALUE  |
            +------------+----------+
            |      1     | Variable |
-           +------------+--- ------+
+           +------------+----------+
 
         o   VCODE - Reference to Var
         		+ I/0 TIMEOUT - Code 0x01
@@ -179,33 +179,6 @@ Configure and Monitor for SOCKS V5 Server
         		(faltan definir algunas variables mas)
 
         o   VVALUE - Variable Value as string. It is null terminated
-
-           
-
-
-
-           +------------+-------------------+
-           |    VCODE   |  VLEN |   VVALUE  |
-           +------------+-------------------+
-           |      1     |   1   |  Variable |
-           +------------+-------------------+
-
-        o   VCODE - Reference to Var
-        		+ I/0 TIMEOUT - Code 0x01
-        		+ - Code 0x02
-        		+ - Code 0x03
-        o   VLEN - VVALUE length
-        o   VVALUE - Variable Value
-
-
-
-	USER is a null terminated string
-	End of users is indicated by \0\0
-
-	Example
-
-	'Juan\0\1Gianfranco\0\1Nicolas\0\1Ignacio\0\1Agustin\0\1\0\0'  
-
 
 	-SET USER - Code 0x06
 
@@ -236,16 +209,3 @@ Configure and Monitor for SOCKS V5 Server
 
         o   VVALUE
         	+ I/0 TIMEOUTS is size_t big endian
-        	
-	 
-
-
-	 
-
-
-
-
-
-
-
-
