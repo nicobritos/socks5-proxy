@@ -359,8 +359,8 @@ void pop3_credentials_init(struct pop3_credentials * credentials){
     credentials->finished = 0;
 }
 
-struct pop3_credentials * pop3_sniffer_consume(struct parser * parser, struct pop3_credentials * pop3_credentials, char * s){
-    for(int i = 0; s[i] && !(pop3_credentials->finished); i++){
+struct pop3_credentials * pop3_sniffer_consume(struct parser * parser, struct pop3_credentials * pop3_credentials, uint8_t *s, size_t max_len){
+    for(size_t i = 0; s[i] && !(pop3_credentials->finished) && i < max_len; i++){
         const struct parser_event * ret = parser_feed(parser, s[i]);
         switch (ret->type)
         {

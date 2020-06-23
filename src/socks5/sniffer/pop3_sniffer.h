@@ -48,7 +48,7 @@ struct parser * pop3_sniffer_init();
  * 
  * Se debe hacer un free_pop3_credentials del puntero devuelto cuando no se use más.
  */
-struct pop3_credentials * pop3_sniffer_consume(struct parser * parser, struct pop3_credentials * pop3_credentials, char * s);
+struct pop3_credentials * pop3_sniffer_consume(struct parser * parser, struct pop3_credentials * pop3_credentials, uint8_t *s, size_t max_len);
 
 /** Destruye el parser **/
 void pop3_sniffer_destroy(struct parser * parser);

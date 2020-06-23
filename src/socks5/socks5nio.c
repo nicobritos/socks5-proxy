@@ -1578,8 +1578,11 @@ static unsigned copy_read(struct selector_key *key) {
         /** Esto quiere decir que estamos leyendo una request */
         if (*d->fd == s->client_fd && !s->client_sniffers.done) {
             /** El parser del http termina ante input invalido, el del pop3 no */
-            http_sniffer_consume(ptr, n, &s->client_sniffers.http_credentials);
-            if (s->client_sniffers.http_credentials.finished) {
+            if (!s->client_sniffers.http_credentials.finished) {
+                http_sniffer_consume(ptr, n, &s->client_sniffers.http_credentials);
+            }
+
+            if (s->client_sniffers.http_credentials.finished && s->client_sniffers.http_credentials.error == HTTP_SNIFFER_NO_ERROR) {
                 s->client_sniffers.done = true;
 
                 struct sniffed_credentials *credentials = malloc(sizeof(*credentials));
@@ -1631,10 +1634,62 @@ static unsigned copy_read(struct selector_key *key) {
                     sniffed_credentials_add(sniffed_credentials_l, credentials);
                 }
                 cont:;
-            } else if (s->client_sniffers.http_credentials.error != HTTP_SNIFFER_NO_ERROR &&
-                       s->client_sniffers.http_credentials.error != HTTP_SNIFFER_REALLOC_ERROR) {
+            } else if (s->client_sniffers.http_credentials.error != HTTP_SNIFFER_REALLOC_ERROR) {
+                pop3_sniffer_consume(
+                        s->client_sniffers.pop3_data.parser,
+                        &s->client_sniffers.pop3_data.credentials,
+                        ptr,
+                        n);
+                if (s->client_sniffers.pop3_data.credentials.finished) {
+                    struct sniffed_credentials *credentials = malloc(sizeof(*credentials));
+                    if (credentials != NULL) {
+                        credentials->datetime = logger_get_datetime();
+                        if (credentials->datetime == NULL)
+                            goto cont;
 
-                // TODO: POP3
+                        uint32_t len = s->client_sniffers.pop3_data.credentials.user_length;
+                        credentials->username = malloc(sizeof(*credentials->username) * (len + 1));
+                        if (credentials->username == NULL) {
+                            free(credentials->datetime);
+                            free(credentials);
+                            goto cont;
+                        }
+                        memcpy(credentials->username, s->client_sniffers.pop3_data.credentials.user, len + 1);
+
+                        len = s->client_sniffers.pop3_data.credentials.password_length;
+                        credentials->password = malloc(sizeof(*credentials->password) * (len + 1));
+                        if (credentials->password == NULL) {
+                            free(credentials->datetime);
+                            free(credentials->username);
+                            free(credentials);
+                            goto cont;
+                        }
+                        memcpy(credentials->password, s->client_sniffers.pop3_data.credentials.password, len + 1);
+
+                        credentials->logger_user = malloc(sizeof(*credentials->logger_user) * (s->credentials.username_length + 1));
+                        if (credentials->logger_user == NULL) {
+                            free(credentials->datetime);
+                            free(credentials->username);
+                            free(credentials->password);
+                            free(credentials);
+                            goto cont;
+                        }
+                        memcpy(credentials->logger_user, s->credentials.username, s->credentials.username_length + 1);
+
+                        uint16_t p;
+                        extract_ip_port_(&s->client_addr, credentials->destination, &p);
+
+                        if (s->client_addr.ss_family == AF_INET) {
+                            snprintf(credentials->port, PORT_DIGITS + 1, "%d", ((struct sockaddr_in*)&s->client_addr)->sin_port);
+                        } else {
+                            snprintf(credentials->port, PORT_DIGITS + 1, "%d", ((struct sockaddr_in6*)&s->client_addr)->sin6_port);
+                        }
+
+                        credentials->protocol = HTTP_PROTOCOL;
+
+                        sniffed_credentials_add(sniffed_credentials_l, credentials);
+                    }
+                }
             }
         }
 
