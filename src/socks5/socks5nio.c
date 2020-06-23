@@ -1280,11 +1280,13 @@ static void log_request(const struct selector_key *key, const struct request_par
 
     snprintf(node->details.origin.port, PORT_DIGITS, "%d", port_client);
     snprintf(node->details.destination.port, PORT_DIGITS, "%d", port_server);
+    node->details.origin.port[PORT_DIGITS] = node->details.destination.port[PORT_DIGITS] = '\0';
 
     if (access_log.first == NULL) {
         access_log.first = access_log.last = node;
     } else {
         access_log.last->next = node;
+        access_log.last = node;
     }
 
     file_log:

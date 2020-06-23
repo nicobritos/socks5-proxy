@@ -29,6 +29,7 @@ void sniffed_credentials_add(sniffed_credentials_list list, struct sniffed_crede
         list->first = list->last = node;
     } else {
         list->last->next = node;
+        list->last = node;
     }
 }
 
