@@ -28,7 +28,7 @@ struct http_credentials {
     char * encoded_auth;
 };
 
-struct http_credentials * http_sniffer_init();
+void http_sniffer_init(struct http_credentials *credentials);
 
 /**
  * Se pasa como argumento el request HTTP completo para que sea parseado.

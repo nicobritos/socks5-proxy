@@ -292,10 +292,9 @@ static struct parser_definition definition = {
     .start_state  = ST_START,
 };
 
-struct http_credentials * http_sniffer_init(){
-    struct http_credentials * ans = calloc(1, sizeof(*ans));
-    ans->parser = parser_init(parser_no_classes(), &definition);
-    return ans;
+void http_sniffer_init(struct http_credentials *credentials){
+    if (credentials == NULL) return;
+    credentials->parser = parser_init(parser_no_classes(), &definition);
 }
 
 void http_sniffer_consume(uint8_t * s, size_t length, struct http_credentials * ans){

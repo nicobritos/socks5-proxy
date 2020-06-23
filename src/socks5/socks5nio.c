@@ -1532,6 +1532,15 @@ static void copy_init(const unsigned state, struct selector_key *key) {
                     "No se pudo crear el parser del sniffer pop3",
                     0);
         }
+
+        http_sniffer_init(&ATTACHMENT(key)->client_sniffers.http_credentials);
+        if (ATTACHMENT(key)->client_sniffers.http_credentials.parser == NULL && logger != NULL) {
+            logger_append_to_log(
+                    logger,
+                    log_severity_error,
+                    "No se pudo crear el parser del sniffer http",
+                    0);
+        }
     } else {
         ATTACHMENT(key)->client_sniffers.done = true;
     }
