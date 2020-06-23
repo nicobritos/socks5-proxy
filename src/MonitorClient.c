@@ -121,9 +121,6 @@ static bool authenticate_user(const char *username, const char *password){
     const int ANSWER_MAX_LENGTH = 255;
     uint8_t answer[ANSWER_MAX_LENGTH];
 
-    bool *dflag = true;
-    bool *aflag = true;
-
     int ret = requestToServer(datagram,datalen,answer,sizeof(uint8_t) * ANSWER_MAX_LENGTH);
 
     if(ret == -1){
@@ -182,52 +179,9 @@ static void login(){
 
 static void start_connection(int argc, char *argv[]){
 
-    check_command_line(argc,argv);
-
     get_address_information();
         
     establish_connection();
-}
-
-static uint16_t parse_port(const char *s) {
-     char *end     = 0;
-     const long sl = strtol(s, &end, 10);
-
-     if (end == s|| '\0' != *end
-        || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)
-        || sl < 0 || sl > USHRT_MAX) {
-         fprintf(stderr, "port should in in the range of 1-65536: %s\n", s);
-         exit(EXIT_FAILURE);
-         return EXIT_FAILURE;
-     }
-     return (uint16_t)sl;
-}
-
-/* TODO
-    -Ver si hay mas opciones por validar
-*/
-static void check_command_line(int argc, char *argv[]){
-    //VALIDAR EL CASO DE EOF o ^D
-    int oc;
-    while((oc = getopt(argc, argv, ":L:P:")) != -1){
-        switch(oc){
-            case 'L':
-                address = malloc(strlen(optarg) + 1);
-                memcpy(address, optarg, strlen(optarg) + 1);
-                break;
-            case 'P':
-                port = parse_port(optarg);
-                break;
-            case ':':
-                fprintf(stderr, "Missing argument after -%c\n",optopt);
-                exit(EXIT_FAILURE);
-            case '?':
-                fprintf(stderr,"Unrecognized option -%c\n",optopt);
-                exit(EXIT_FAILURE);
-            default:
-                exit(EXIT_FAILURE);
-        }
-    }
 }
 
 static void get_address_information(){
@@ -288,9 +242,6 @@ static void get_command(const int code){
 
     const int ANSWER_MAX_LENGTH = 255;
     uint8_t answer[ANSWER_MAX_LENGTH];
-
-    bool *dflag = true;
-    bool *aflag = true;
 
     int ret = requestToServer(datagram, sizeof(uint8_t) * DATAGRAM_MAX_LENGTH, answer, sizeof(uint8_t) * ANSWER_MAX_LENGTH);
 
@@ -435,6 +386,71 @@ static void get_vars(char *response, int length){
 //     }
 }
 
+static void set_user(){
+    char user[MAX_BUFFER];
+    char pass[MAX_BUFFER];
+    
+    printf("\nEnter user data\n");
+  
+    printf("Username: ");
+    if(fgets(buffer, sizeof(buffer), stdin) != NULL){
+        buffer[strcspn(buffer, "\r\n")] = '\0';
+        sscanf(buffer, "%s", user);
+    }
+
+    if(strlen(user) > 255){
+        printf("Username must be shorter\n");
+        return;
+    }
+    
+    printf("Password: ");
+    if(fgets(buffer, sizeof(buffer), stdin) != NULL){
+        buffer[strcspn(buffer, "\r\n")] = '\0';
+        sscanf(buffer, "%s", pass);
+    }
+
+    if(strlen(pass) > 255){
+        printf("Password must be shorter\n");
+    }
+
+    printf("Mode: \n");
+    printf("[0] Disables user to use Proxy\n");
+    printf("[1] Enables user to use Proxy, creates user if it does not exists\n");
+    printf("[2] Removes user\n");
+
+    if(fgets(buffer,sizeof(buffer),stdin) == NULL){
+        fprintf(stderr,"Please, choose an option.\n");
+        return;
+    }
+
+    char *ptr;
+    long ret;
+
+    ret = strtoul(buffer,&ptr,10);
+
+    if(ret == 0 || ret == 1 || ret == 2){
+        
+        int DATAGRAM_MAX_LENGTH = (1+2*255);
+        uint8_t datagram [DATAGRAM_MAX_LENGTH];
+
+        const uint8_t ulen = (uint8_t) strlen(user);
+        const uint8_t plen = (uint8_t) strlen(pass);
+        const uint8_t datalen = 3 + ulen + plen;
+
+        
+        strcpy(datagram,username);
+        strcpy(datagram+(1+ulen),password);
+        datagram[datalen-1] = ret;
+
+        int ret;
+        ret = sctp_sendmsg (sd, (void *)datagram, (size_t) datalen,NULL, 0, 0, 0, 0, 0, 0);
+
+        if(ret == -1){
+            printf("Error sending request\n");
+        }
+    }
+}
+
 static void get_menu_option(){
     printf("\nMenu options:\n");
     printf("[1] Show metrics\n");
@@ -442,6 +458,8 @@ static void get_menu_option(){
     printf("[3] Show access logs\n");
     printf("[4] Show passwords\n");
     printf("[5] Show vars\n");
+    printf("[6] Set users\n");
+    printf("[7] Set vars\n");
 
 
     if(fgets(buffer,sizeof(buffer),stdin) == NULL){
@@ -463,7 +481,7 @@ static void get_menu_option(){
             get_command(ret);
             break;
         case 6:
-            // set_user();
+            set_user();
             break;
         case 7:
             // set_var();
