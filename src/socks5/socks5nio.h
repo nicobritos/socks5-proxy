@@ -20,6 +20,8 @@ struct socks_access_log_details_t {
         char *name;
         char port[PORT_DIGITS + 1];
     } destination;
+
+    uint8_t status;
 };
 
 typedef struct socks_access_log_node_CDT *socks_access_log_node_t;

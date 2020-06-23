@@ -1,5 +1,5 @@
-from graphviz import Source
 import sys
+from graphviz import Source
 
 if(len(sys.argv) != 2):
     raise Exception('Uso del archivo: "open_dot_file /path/to/file"')

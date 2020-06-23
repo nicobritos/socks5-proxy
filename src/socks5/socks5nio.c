@@ -1282,6 +1282,8 @@ static void log_request(const struct selector_key *key, const struct request_par
     snprintf(node->details.destination.port, PORT_DIGITS, "%d", port_server);
     node->details.origin.port[PORT_DIGITS] = node->details.destination.port[PORT_DIGITS] = '\0';
 
+    node->details.status = socks_status;
+
     if (access_log.first == NULL) {
         access_log.first = access_log.last = node;
     } else {
@@ -1317,7 +1319,7 @@ static void log_request(const struct selector_key *key, const struct request_par
                         s->client_request.request.domain_name,
                         ip_buffer_server,
                         s->client_request.request.port,
-                        errored ? port_server : -1,
+                        errored ? -1 : port_server,
                         socks_status_str
                 );
             } else {
@@ -1332,7 +1334,7 @@ static void log_request(const struct selector_key *key, const struct request_par
                         connected_str,
                         ip_buffer_server,
                         s->client_request.request.port,
-                        errored ? port_server : -1,
+                        errored ? -1 : port_server,
                         socks_status_str
                 );
             }
@@ -1349,7 +1351,7 @@ static void log_request(const struct selector_key *key, const struct request_par
                         s->client_request.request.domain_name,
                         ip_buffer_server,
                         s->client_request.request.port,
-                        errored ? port_server : -1,
+                        errored ? -1 : port_server,
                         socks_status_str
                 );
             } else {
@@ -1363,7 +1365,7 @@ static void log_request(const struct selector_key *key, const struct request_par
                         connected_str,
                         ip_buffer_server,
                         s->client_request.request.port,
-                        errored ? port_server : -1,
+                        errored ? -1 : port_server,
                         socks_status_str
                 );
             }

@@ -12,18 +12,12 @@
  */
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
-#include <limits.h>
 #include <errno.h>
 #include <signal.h>
 
 #include <unistd.h>
-#include <sys/types.h>   // socket
 #include <sys/socket.h>  // socket
 #include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <limits.h>
-#include <arpa/inet.h>
 
 #include "args_helper.h"
 #include "utils/selector.h"
@@ -31,7 +25,6 @@
 #include "socks5/socks5nio.h"
 #include "socks5/message/auth_user_pass_helper.h"
 #include "configuration.h"
-#include "doh/doh.h"
 
 #define SYSTEM_LOG_FILENAME "system.log"
 
@@ -70,7 +63,9 @@ main(const int argc, char **argv) {
     // man 7 ip. no importa reportar nada si falla.
     setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int) {1}, sizeof(int));
     // Necesitamos desactivar esto para bindear a IPv4 e IPv6 al mismo tiempo
-    setsockopt(server, IPPROTO_IPV6, IPV6_V6ONLY, &(int) {0}, sizeof(int));
+    if (configuration.socks5.sockaddr.ss_family == AF_INET6) {
+        setsockopt(server, IPPROTO_IPV6, IPV6_V6ONLY, &(int) {0}, sizeof(int));
+    }
 
     if (bind(server, (struct sockaddr *) &configuration.socks5.sockaddr, sizeof(configuration.socks5.sockaddr)) < 0) {
         err_msg = "unable to bind socket";
