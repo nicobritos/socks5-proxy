@@ -683,17 +683,9 @@ static struct parser_definition definition = {
         .start_state  = ST_YEAR_1,
 };
 
-struct passwords * get_passwords_parser(uint8_t *s, size_t length) {
+struct passwords * get_passwords_parser_init(){
     struct passwords * ans = calloc(1, sizeof(*ans));
     struct parser *parser = parser_init(parser_no_classes(), &definition);
-    size_t current_time_length = 0;
-    size_t current_user_length = 0;
-    size_t current_protocol_length = 0;
-    size_t current_destination_length = 0;
-    size_t current_username_length = 0;
-    size_t current_password_length = 0;
-    parser_error_t ans_error = NO_ERROR;
-    int finished = 0;
     ans->entries = resize_if_needed(ans->entries, sizeof(*ans->entries), ans->entry_qty);
     ans->entries[ans->entry_qty].time = NULL;
     ans->entries[ans->entry_qty].user = NULL;
@@ -702,44 +694,45 @@ struct passwords * get_passwords_parser(uint8_t *s, size_t length) {
     ans->entries[ans->entry_qty].destination_port = 0;
     ans->entries[ans->entry_qty].username = NULL;
     ans->entries[ans->entry_qty].password = NULL;
+}
+
+struct passwords * get_passwords_parser_consume(uint8_t *s, size_t length, struct passwords * ans) {
+    parser_error_t ans_error = NO_ERROR;
     for (size_t i = 0; i<length; i++) {
-        const struct parser_event* ret = parser_feed(parser, s[i]);
+        const struct parser_event* ret = parser_feed(ans->parser, s[i]);
         switch (ret->type) {
             case COPY_TIME:
-                ans_error = add_to_string(&(ans->entries[ans->entry_qty].time), s[i], &current_time_length);
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].time), s[i], &(ans->current_time_length));
                 if(ans_error != NO_ERROR){
                     if(ans->entries[ans->entry_qty].time != NULL){
                         free(ans->entries[ans->entry_qty].time);
                     }
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
             case COPY_USER:
-                ans_error = add_to_string(&(ans->entries[ans->entry_qty].user), s[i], &current_user_length);
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].user), s[i], &(ans->current_user_length));
                 if(ans_error != NO_ERROR){
                     if(ans->entries[ans->entry_qty].user != NULL){
                         free(ans->entries[ans->entry_qty].time);
                         free(ans->entries[ans->entry_qty].user);
                     }
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
             case COPY_PROTOCOL:
-                ans_error = add_to_string(&(ans->entries[ans->entry_qty].protocol), s[i], &current_protocol_length);
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].protocol), s[i], &(ans->current_protocol_length));
                 if(ans_error != NO_ERROR){
                     if(ans->entries[ans->entry_qty].protocol != NULL){
                         free(ans->entries[ans->entry_qty].time);
                         free(ans->entries[ans->entry_qty].user);
                         free(ans->entries[ans->entry_qty].protocol);
                     }
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
             case COPY_DESTINATION:
-                ans_error = add_to_string(&(ans->entries[ans->entry_qty].destination), s[i], &current_destination_length);
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].destination), s[i], &(ans->current_destination_length));
                 if(ans_error != NO_ERROR){
                     if(ans->entries[ans->entry_qty].destination != NULL){
                         free(ans->entries[ans->entry_qty].time);
@@ -747,7 +740,6 @@ struct passwords * get_passwords_parser(uint8_t *s, size_t length) {
                         free(ans->entries[ans->entry_qty].protocol);
                         free(ans->entries[ans->entry_qty].destination);
                     }
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
@@ -756,7 +748,7 @@ struct passwords * get_passwords_parser(uint8_t *s, size_t length) {
                 ans->entries[ans->entry_qty].destination_port += s[i] - '0';
             break;
             case COPY_USERNAME:
-                ans_error = add_to_string(&(ans->entries[ans->entry_qty].username), s[i], &current_username_length);
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].username), s[i], &(ans->current_username_length));
                 if(ans_error != NO_ERROR){
                     if(ans->entries[ans->entry_qty].username != NULL){
                         free(ans->entries[ans->entry_qty].time);
@@ -765,12 +757,11 @@ struct passwords * get_passwords_parser(uint8_t *s, size_t length) {
                         free(ans->entries[ans->entry_qty].destination);
                         free(ans->entries[ans->entry_qty].username);
                     }
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
             case COPY_PASSWORD:
-                ans_error = add_to_string(&(ans->entries[ans->entry_qty].password), s[i], &current_password_length);
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].password), s[i], &(ans->current_password_length));
                 if(ans_error != NO_ERROR){
                     if(ans->entries[ans->entry_qty].username != NULL){
                         free(ans->entries[ans->entry_qty].time);
@@ -780,17 +771,16 @@ struct passwords * get_passwords_parser(uint8_t *s, size_t length) {
                         free(ans->entries[ans->entry_qty].username);
                         free(ans->entries[ans->entry_qty].password);
                     }
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
             case END_ENTRY_T:
-                current_time_length = 0;
-                current_user_length = 0;
-                current_protocol_length = 0;
-                current_destination_length = 0;
-                current_username_length = 0;
-                current_password_length = 0;
+                ans->current_time_length = 0;
+                ans->current_user_length = 0;
+                ans->current_protocol_length = 0;
+                ans->current_destination_length = 0;
+                ans->current_username_length = 0;
+                ans->current_password_length = 0;
                 (ans->entry_qty)++;
                 ans->entries = resize_if_needed(ans->entries, sizeof(*ans->entries), ans->entry_qty);
                 ans->entries[ans->entry_qty].time = NULL;
@@ -804,10 +794,9 @@ struct passwords * get_passwords_parser(uint8_t *s, size_t length) {
             case END_T:
                 ans->entries = realloc(ans->entries, sizeof(*(ans->entries)) * ans->entry_qty);
                 if(ans->entries == NULL){
-                    parser_destroy(parser);
                     return error(ans, REALLOC_ERROR);
                 }
-                finished = 1;
+                ans->finished = 1;
             break;
             case INVALID_INPUT_FORMAT_T:
                 if(ans->entries[ans->entry_qty].time != NULL){
@@ -828,15 +817,9 @@ struct passwords * get_passwords_parser(uint8_t *s, size_t length) {
                         }
                     }
                 }
-                parser_destroy(parser);
                 return error(ans, INVALID_INPUT_FORMAT_ERROR);
         }
     }
-    if(!finished){
-        parser_destroy(parser);
-        return error(ans, INVALID_INPUT_FORMAT_ERROR);
-    }
-    parser_destroy(parser);
     return ans;
 }
 
@@ -852,6 +835,10 @@ void free_passwords(struct passwords *passwords) {
                 free(passwords->entries[i].password);
             }
             free(passwords->entries);
+        }
+        if(passwords->parser != NULL){
+            free(passwords->parser);
+            passwords->parser = NULL;
         }
         free(passwords);
     }
