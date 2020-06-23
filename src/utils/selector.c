@@ -6,7 +6,6 @@
 #include <string.h> // memset
 #include <assert.h> // :)
 #include <errno.h>  // :)
-#include <pthread.h>
 
 #include <stdint.h> // SIZE_MAX
 #include <unistd.h>
@@ -147,16 +146,6 @@ struct fdselector {
     struct timespec master_t;
     /** tambien select() puede cambiar el valor */
     struct timespec slave_t;
-
-    // notificaciónes entre blocking jobs y el selector
-    volatile pthread_t selector_thread;
-    /** protege el acceso a resolutions jobs */
-    pthread_mutex_t resolution_mutex;
-    /**
-     * lista de trabajos blockeantes que finalizaron y que pueden ser
-     * notificados.
-     */
-    struct blocking_job *resolution_jobs;
 };
 
 /** cantidad máxima de file descriptors que la plataforma puede manejar */
@@ -294,8 +283,6 @@ selector_new(const size_t initial_elements) {
         ret->master_t.tv_sec = conf.select_timeout.tv_sec;
         ret->master_t.tv_nsec = conf.select_timeout.tv_nsec;
         assert(ret->max_fd == 0);
-        ret->resolution_jobs = 0;
-        pthread_mutex_init(&ret->resolution_mutex, 0);
         if (0 != ensure_capacity(ret, initial_elements)) {
             selector_destroy(ret);
             ret = NULL;
@@ -313,11 +300,6 @@ selector_destroy(fd_selector s) {
                 if (ITEM_USED(s->fds + i)) {
                     selector_unregister_fd(s, i);
                 }
-            }
-            pthread_mutex_destroy(&s->resolution_mutex);
-            for (struct blocking_job *j = s->resolution_jobs; j != NULL;
-                 j = j->next) {
-                free(j);
             }
             free(s->fds);
             s->fds = NULL;
@@ -478,57 +460,6 @@ handle_iteration(fd_selector s) {
     }
 }
 
-static void
-handle_block_notifications(fd_selector s) {
-    struct selector_key key = {
-            .s = s,
-    };
-    pthread_mutex_lock(&s->resolution_mutex);
-    for (struct blocking_job *j = s->resolution_jobs;
-         j != NULL;
-         j = j->next) {
-
-        struct item *item = s->fds + j->fd;
-        if (ITEM_USED(item)) {
-            key.fd = item->fd;
-            key.data = item->data;
-            item->handler->handle_block(&key);
-        }
-
-//        free(j);
-    }
-    s->resolution_jobs = 0;
-    pthread_mutex_unlock(&s->resolution_mutex);
-}
-
-
-selector_status
-selector_notify_block(fd_selector s,
-                      const int fd) {
-    selector_status ret = SELECTOR_SUCCESS;
-
-    // TODO(juan): usar un pool
-    struct blocking_job *job = malloc(sizeof(*job));
-    if (job == NULL) {
-        ret = SELECTOR_ENOMEM;
-        goto finally;
-    }
-    job->s = s;
-    job->fd = fd;
-
-    // encolamos en el selector los resultados
-    pthread_mutex_lock(&s->resolution_mutex);
-    job->next = s->resolution_jobs;
-    s->resolution_jobs = job;
-    pthread_mutex_unlock(&s->resolution_mutex);
-
-    // notificamos al hilo principal
-    pthread_kill(s->selector_thread, conf.signal);
-
-    finally:
-    return ret;
-}
-
 selector_status
 selector_select(fd_selector s) {
     selector_status ret = SELECTOR_SUCCESS;
@@ -536,8 +467,6 @@ selector_select(fd_selector s) {
     memcpy(&s->slave_r, &s->master_r, sizeof(s->slave_r));
     memcpy(&s->slave_w, &s->master_w, sizeof(s->slave_w));
     memcpy(&s->slave_t, &s->master_t, sizeof(s->slave_t));
-
-    s->selector_thread = pthread_self();
 
     int fds = pselect(s->max_fd + 1, &s->slave_r, &s->slave_w, 0, &s->slave_t,
                       &emptyset);
@@ -567,9 +496,7 @@ selector_select(fd_selector s) {
     } else {
         handle_iteration(s);
     }
-    if (ret == SELECTOR_SUCCESS) {
-        handle_block_notifications(s);
-    }
+
     finally:
     return ret;
 }

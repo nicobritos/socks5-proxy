@@ -335,7 +335,6 @@ static bool extract_ip_port_(const struct sockaddr_storage *s, char *buffer, uin
  */
 static void socksv5_read(struct selector_key *key);
 static void socksv5_write(struct selector_key *key);
-static void socksv5_block(struct selector_key *key);
 static void socksv5_close(struct selector_key *key);
 static void socksv5_done(struct selector_key* key);
 static void close_fd_(int fd, struct selector_key* key);
@@ -344,7 +343,6 @@ static const struct fd_handler socks5_handler = {
         .handle_read   = socksv5_read,
         .handle_write  = socksv5_write,
         .handle_close  = socksv5_close,
-        .handle_block  = socksv5_block,
 };
 
 /** ---------------- HELLO ---------------- */
@@ -702,15 +700,6 @@ static void socksv5_read(struct selector_key *key) {
 static void socksv5_write(struct selector_key *key) {
     struct state_machine *stm = &ATTACHMENT(key)->stm;
     const enum socks_v5state st = stm_handler_write(stm, key);
-
-    if (ERROR == st || DONE == st) {
-        socksv5_done(key);
-    }
-}
-
-static void socksv5_block(struct selector_key *key) {
-    struct state_machine *stm = &ATTACHMENT(key)->stm;
-    const enum socks_v5state st = stm_handler_block(stm, key);
 
     if (ERROR == st || DONE == st) {
         socksv5_done(key);
