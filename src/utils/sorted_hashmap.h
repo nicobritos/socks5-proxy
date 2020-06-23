@@ -79,4 +79,14 @@ bool sorted_hashmap_set_cmp(sorted_hashmap_t hashmap, int8_t (cmp)(void *e1, voi
  */
 bool sorted_hashmap_set_hasher(sorted_hashmap_t hashmap, hash_t (hasher)(void *e));
 
+/**
+ * Setea la funcion de free. Se encarga de eliminar el elemento de memoria (si es necesario)
+ * No es obligatorio. Si no se pasa, no se hace ningun free sobre el elemento
+ * Se llama cuando el elemento es removido del mapa
+ * @param hashmap
+ * @param freer
+ * @return
+ */
+bool sorted_hashmap_set_freer(sorted_hashmap_t hashmap, void (freer)(void *e));
+
 #endif //PC_2020A_6_TPE_SOCKSV5_SORTED_HASHMAP_H
