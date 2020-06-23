@@ -23,6 +23,7 @@ struct auth_user_pass_credentials {
     char *password;
     /** Guardamos el largo del username para evitar volver a recorrerlo */
     uint8_t username_length;
+    bool active;
 };
 
 /**
@@ -44,6 +45,11 @@ enum auth_user_pass_helper_status auth_user_pass_helper_add(const struct auth_us
  * @return auth_user_pass_helper_status_... acorde al resultado
  */
 enum auth_user_pass_helper_status auth_user_pass_helper_remove(const char *username);
+
+/**
+ * Activa o desactiva un usuario. Deberia de ser solo usable desde el monitor
+ */
+enum auth_user_pass_helper_status auth_user_pass_helper_set_enable(const char *username, bool enable);
 
 /**
  * Verifica que el usuario exista y que la contrasena sea correcta

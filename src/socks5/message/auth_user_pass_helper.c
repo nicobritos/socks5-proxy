@@ -11,12 +11,22 @@
 #define INITIAL_HASHMAP_SIZE 50
 
 /** ------------- DECLARATIONS ------------- */
+static struct auth_user_pass_credentials *duplicate_credentials(const struct auth_user_pass_credentials *credentials);
+
 /**
  * Esta funcion hashea un credentials (se hashea solo el username)
  * @param e
  * @return
  */
 static hash_t auth_user_pass_hasher(void *e);
+
+/**
+ * Esta funcion hace un free de un credentials cuando se elimina del mapa
+ * @param e
+ * @return
+ */
+static void auth_user_pass_freer(void *e);
+
 /**
  * Esta funcion compara un credentials (se compara solo el username)
  * @param e1
@@ -26,12 +36,6 @@ static hash_t auth_user_pass_hasher(void *e);
 static int8_t auth_user_pass_cmp(void *e1, void *e2);
 
 static sorted_hashmap_t credentials_map = NULL;
-
-static struct auth_user_pass_credentials default_user = {
-        .username = AUTH_USER_PASS_DEFAULT_USER,
-        .username_length = AUTH_USER_PASS_DEFAULT_USER_LENGTH,
-        .password = AUTH_USER_PASS_DEFAULT_PASS
-};
 
 /**
  * Inicializa y pone los user/pass en memoria
@@ -43,11 +47,30 @@ enum auth_user_pass_helper_status auth_user_pass_helper_init() {
     if (credentials_map == NULL) return auth_user_pass_helper_status_error_no_memory;
 
     sorted_hashmap_set_hasher(credentials_map, auth_user_pass_hasher);
+    sorted_hashmap_set_freer(credentials_map, auth_user_pass_freer);
     sorted_hashmap_set_cmp(credentials_map, auth_user_pass_cmp);
 
     /** Agregamos el default user */
-    sorted_hashmap_node node = sorted_hashmap_add(credentials_map, (void*)&default_user);
-    if (node == NULL) return auth_user_pass_helper_status_error_no_memory;
+    struct auth_user_pass_credentials default_user = {
+            .username = AUTH_USER_PASS_DEFAULT_USER,
+            .username_length = AUTH_USER_PASS_DEFAULT_USER_LENGTH,
+            .password = AUTH_USER_PASS_DEFAULT_PASS
+    };
+
+    struct auth_user_pass_credentials *user = duplicate_credentials(&default_user);
+    if (user == NULL) {
+        sorted_hashmap_free(credentials_map);
+        credentials_map = NULL;
+        return auth_user_pass_helper_status_error_no_memory;
+    }
+
+    sorted_hashmap_node node = sorted_hashmap_add(credentials_map, (void*)user);
+    if (node == NULL) {
+        free(user);
+        sorted_hashmap_free(credentials_map);
+        credentials_map = NULL;
+        return auth_user_pass_helper_status_error_no_memory;
+    }
 
     // TODO: read from file
     return auth_user_pass_helper_status_ok;
@@ -64,14 +87,29 @@ enum auth_user_pass_helper_status auth_user_pass_helper_add(const struct auth_us
 
     sorted_hashmap_node node = sorted_hashmap_find(credentials_map, (void*)credentials);
     if (node != NULL) {
-        struct auth_user_pass_credentials *node_credentials = sorted_hashmap_get_element(node);
-        if (strcmp(node_credentials->username, credentials->username) != 0)
-            return auth_user_pass_helper_status_error_user_already_exists;
-
-        node_credentials->password = credentials->password;
+        return auth_user_pass_helper_status_error_user_already_exists;
     } else {
         sorted_hashmap_add(credentials_map, (void*)credentials);
     }
+    return auth_user_pass_helper_status_ok;
+}
+
+/**
+ * Activa o desactiva un usuario. Deberia de ser solo usable desde el monitor
+ */
+enum auth_user_pass_helper_status auth_user_pass_helper_set_enable(const char *username, bool enable) {
+    if (credentials_map == NULL) return auth_user_pass_helper_status_error_not_initialized;
+    if (username == NULL) return auth_user_pass_helper_status_error_invalid_credentials;
+
+    struct auth_user_pass_credentials credentials = {
+            .username = (char *) username, // No nos importa que no sea const porque solo lo usamos en busqueda
+            .username_length = strlen(username),
+    };
+    sorted_hashmap_node node = sorted_hashmap_find(credentials_map, (void*)&credentials);
+    if (node == NULL) return auth_user_pass_helper_status_error_user_not_found;
+
+    ((struct auth_user_pass_credentials *) sorted_hashmap_get_element(node))->active = enable;
+
     return auth_user_pass_helper_status_ok;
 }
 
@@ -124,6 +162,31 @@ void auth_user_pass_helper_close() {
 }
 
 /** ---------------- PRIVATE ----------------- */
+static struct auth_user_pass_credentials *duplicate_credentials(const struct auth_user_pass_credentials *credentials) {
+    struct auth_user_pass_credentials *copy = malloc(sizeof(*copy));
+    if (copy == NULL) return NULL;
+
+    copy->username_length = strlen(credentials->username);
+    size_t password_length = strlen(credentials->password);
+
+    copy->username = malloc(sizeof(*copy->username) * (copy->username_length + 1));
+    if (copy->username == NULL) {
+        free(copy);
+        return NULL;
+    }
+    memcpy(copy->username, credentials->username, credentials->username_length + 1);
+
+    copy->password = malloc(sizeof(*copy->password) * password_length + 1);
+    if (copy->password == NULL) {
+        free(copy->username);
+        free(copy);
+        return NULL;
+    }
+    memcpy(copy->password, credentials->password, password_length + 1);
+
+    return copy;
+}
+
 /**
  * Esta funcion hashea un credentials (se hashea solo el username)
  * @param e
@@ -139,6 +202,19 @@ static hash_t auth_user_pass_hasher(void *e) {
     while ((c = *username++)) hash = ((hash << GENERIC_SHIFT_HASH_VALUE) + hash) + c; /* hash * 33 + c */
 
     return hash;
+}
+
+/**
+ * Esta funcion hace un free de un credentials cuando se elimina del mapa
+ * @param e
+ * @return
+ */
+static void auth_user_pass_freer(void *e) {
+    struct auth_user_pass_credentials *credentials = e;
+
+    free(credentials->username);
+    free(credentials->password);
+    free(e);
 }
 
 /**
