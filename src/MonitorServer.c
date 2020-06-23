@@ -20,6 +20,9 @@
 
 #include "MonitorServer.h"
 #include "args.h"
+#include "socks5/sniffer/sniffed_credentials.h"
+#include "socks5/message/auth_user_pass_helper.h"
+#include "src/utils/log_helper.h"
 
 #define MAX_BUFFER 1024
 #define MY_PORT_NUM 57611
@@ -44,8 +47,6 @@ static bool authenticate_user(char *buffer){
     strcpy(userRec,buffer+1);
     strcpy(passRec,buffer+2+strlen(userRec));
 
-    printf("user->%s\n",userRec);
-    printf("Pass ->%s\n",passRec);
     if( strcmp(user,userRec) == 0){
         if(strcmp(password,passRec) == 0){
             logged = true;
@@ -155,9 +156,7 @@ static void sign_in(char *buffer){
         strcpy(message,"Username Or Password Incorrect");
     }
 
-    strcpy(response+1,message);
-    response[1+strlen(message)] = '\0';
-    
+    strcpy(response+1,message);    
 
     int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t)*(strlen(message)+2),NULL, 0, 0, 0, 0, 0, 0);
     if(ret == -1){
@@ -200,8 +199,31 @@ static void get_users(){
     +------------+------------+
     */
 
-    const int RESPONSE_MAX_LENGTH = 255;
+    const int RESPONSE_MAX_LENGTH = 1024;
     uint8_t response[RESPONSE_MAX_LENGTH];
+
+    sorted_hashmap_list_t aup = auth_user_pass_get_values();
+    if(aup != NULL){
+        int length = 0;
+        sorted_hashmap_list_node_t node = sorted_hashmap_list_get_first(aup);
+        while(node != NULL){
+            struct auth_user_pass_credentials *credentials = sorted_hashmap_list_get_element(node);
+            strcpy(response+length,credentials->username);
+            length += (credentials->username_length + 1);
+            response[length] = credentials->active;
+            length += 1;
+
+            node = sorted_hashmap_list_get_next_node(node);
+        }
+        response[length] = '\0';
+    }
+
+    sorted_hashmap_list_free(aup);
+
+    int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t)*RESPONSE_MAX_LENGTH,NULL, 0, 0, 0, 0, 0, 0);
+    if(ret == -1){
+        printf("Error sending message\n");
+    }
 
 }
 
@@ -226,9 +248,73 @@ static void get_passwords(){
     +----------+----------+-------+----------+----------+----------+----------+----------+
     */
 
-   sniffed_credentials_list = socks_get_sniffed_credentials_list();
-   
+    const int RESPONSE_MAX_LENGTH = 2048;
+    uint8_t response[RESPONSE_MAX_LENGTH];
 
+    sniffed_credentials_list scl = socks_get_sniffed_credentials_list();
+
+    if(scl != NULL){
+        int length=0;
+        sniffed_credentials_node node = sniffed_credentials_get_first(scl);
+        while(node != NULL){
+            struct sniffed_credentials * credential = sniffed_credentials_get(node);
+
+            strcpy(response+length,credential->datetime);
+            length += (strlen(credential->datetime)+1);
+            strcpy(response+length,credential->username); 
+            length += (strlen(credential->username)+1);
+            strcpy(response+length,"P"); 
+            length += (strlen("P")+1);
+            strcpy(response+length,credential->protocol); 
+            length += (strlen(credential->protocol)+1);
+            strcpy(response+length,credential->destination); 
+            length += (strlen(credential->destination)+1);
+            strcpy(response+length,credential->port); 
+            length += (strlen(credential->port)+1);
+            strcpy(response+length,credential->logger_user); 
+            length += (strlen(credential->logger_user)+1);
+            strcpy(response+length,credential->password); 
+            length += (strlen(credential->password)+1);
+            response[length] = '\0';
+
+            node = sniffed_credentials_get_next(node);
+        }
+        response[length] = '\0';
+    }
+
+    sniffed_credentials_destroy(scl);
+
+    int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t)*RESPONSE_MAX_LENGTH,NULL, 0, 0, 0, 0, 0, 0);
+    if(ret == -1){
+        printf("Error sending message\n");
+    }
+}
+
+static void get_vars(){
+
+    /*
+    +-------+----------+
+    | VCODE |  VVALUE  |
+    +-------+----------+
+    |   1   | Variable |
+    +-------+----------+
+    */
+
+    int RESPONSE_MAX_LENGTH = 2;
+    uint8_t response[RESPONSE_MAX_LENGTH];
+    
+    log_t log = logger_get_system_log();
+
+    if(log != NULL){
+        response[0] = 0x02;
+        enum log_severity log_sev = logger_get_log_severity(log);
+        response[1] = log_sev;
+    }
+
+    int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t)*RESPONSE_MAX_LENGTH,NULL, 0, 0, 0, 0, 0, 0);
+    if(ret == -1){
+        printf("Error sending message\n");
+    }
 
 }
 
@@ -252,7 +338,15 @@ static void parse_command(char *buffer){
             break;
         case 0x05:
             printf("GET_VARS\n");
-            // get_vars();
+            get_vars();
+            break;
+        case 0x06:
+            printf("SET_USER\n");
+            // set_user();
+            break;
+        case 0x07:
+            printf("SET_VAR\n");
+            // set_var();
             break;
         default:
             break;
