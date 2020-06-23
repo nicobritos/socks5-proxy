@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "../../utils/sorted_hashmap.h"
 
 #define AUTH_USER_PASS_DEFAULT_USER "root"
 #define AUTH_USER_PASS_DEFAULT_USER_LENGTH 4
@@ -25,6 +26,9 @@ struct auth_user_pass_credentials {
     uint8_t username_length;
     bool active;
 };
+
+typedef struct auth_user_pass_list_CDT *auth_user_pass_list_t;
+typedef struct auth_user_pass_node_list_CDT *auth_user_pass_node_list_t;
 
 /**
  * Inicializa y pone los user/pass en memoria
@@ -62,5 +66,10 @@ bool auth_user_pass_helper_verify(const struct auth_user_pass_credentials *crede
  * Elimina toda la informacion de memoria
  */
 void auth_user_pass_helper_close();
+
+/**
+ * Crea una lista con todos los nodos
+ */
+sorted_hashmap_list_t auth_user_pass_get_values();
 
 #endif //PC_2020A_6_TPE_SOCKSV5_AUTH_USER_PASS_HELPER_H

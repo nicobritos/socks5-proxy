@@ -10,6 +10,8 @@
 
 typedef struct hashmapCDT *sorted_hashmap_t;
 typedef struct hashmap_nodeCDT *sorted_hashmap_node;
+typedef struct hashmap_list_CDT *sorted_hashmap_list_t;
+typedef struct hashmap_list_node_CDT *sorted_hashmap_list_node_t;
 typedef uint64_t hash_t;
 
 /**
@@ -88,5 +90,37 @@ bool sorted_hashmap_set_hasher(sorted_hashmap_t hashmap, hash_t (hasher)(void *e
  * @return
  */
 bool sorted_hashmap_set_freer(sorted_hashmap_t hashmap, void (freer)(void *e));
+
+/**
+ * Crea una lista con todos los nodos
+ */
+sorted_hashmap_list_t sorted_hashmap_get_values(sorted_hashmap_t hashmap);
+
+/**
+ * Devuelve el primer elemento en la lista
+ * @param list
+ * @return
+ */
+sorted_hashmap_list_node_t sorted_hashmap_list_get_first(sorted_hashmap_list_t list);
+
+/**
+ * Devuelve el siguiente nodo si es que existe, o NULL
+ * @param node
+ * @return
+ */
+sorted_hashmap_list_node_t sorted_hashmap_list_get_next_node(sorted_hashmap_list_node_t node);
+
+/**
+ * Devuelve el elemento asociado
+ * @param node
+ * @return
+ */
+void *sorted_hashmap_list_get_element(sorted_hashmap_list_node_t node);
+
+/**
+ * Elimina los recursos ocupados por una lista
+ * @param list
+ */
+void sorted_hashmap_list_free(sorted_hashmap_list_t list);
 
 #endif //PC_2020A_6_TPE_SOCKSV5_SORTED_HASHMAP_H

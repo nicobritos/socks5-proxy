@@ -5,7 +5,6 @@
  */
 
 #include "auth_user_pass_helper.h"
-#include "../../utils/sorted_hashmap.h"
 #include <string.h>
 
 #define INITIAL_HASHMAP_SIZE 50
@@ -159,6 +158,13 @@ void auth_user_pass_helper_close() {
     if (credentials_map == NULL) return;
     sorted_hashmap_free(credentials_map);
     credentials_map = NULL;
+}
+
+/**
+ * Crea una lista con todos los nodos
+ */
+sorted_hashmap_list_t auth_user_pass_get_values() {
+    return sorted_hashmap_get_values(credentials_map);
 }
 
 /** ---------------- PRIVATE ----------------- */
