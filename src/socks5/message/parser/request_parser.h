@@ -189,7 +189,7 @@ void request_parser_close(struct request_parser *p);
  */
 int request_parser_write_response(
         buffer *buffer,
-        const struct sockaddr_storage *server_addr,
+        const struct sockaddr_storage *client_addr,
         uint8_t reply);
 
 #endif //PC_2020A_6_TPE_SOCKSV5_REQUEST_PARSER_H

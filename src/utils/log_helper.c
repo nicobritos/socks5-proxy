@@ -37,7 +37,7 @@ static log_t system_log;
 static bool should_append_(log_t log, enum log_severity severity);
 
 /**
- * Idem funcion append_to_log pero sin chequeo
+ * Idem funcion logger_append_to_log pero sin chequeo
  * @param log
  * @param s
  */
@@ -57,9 +57,9 @@ static const char *get_severity_str_(enum log_severity severity);
  * @param filename
  * @param severity
  */
-log_t init_system_log(const char *filename, enum log_severity severity) {
+log_t logger_init_system_log(const char *filename, enum log_severity severity) {
     if (system_log != NULL) return system_log;
-    return system_log = init_log(filename, severity);
+    return system_log = logger_init_log(filename, severity);
 }
 
 /**
@@ -68,7 +68,7 @@ log_t init_system_log(const char *filename, enum log_severity severity) {
  * @param filename
  * @param severity
  */
-log_t init_log(const char *filename, enum log_severity severity) {
+log_t logger_init_log(const char *filename, enum log_severity severity) {
     log_t log = calloc(sizeof(*log), 1);
     if (log == NULL) return NULL;
 
@@ -87,6 +87,34 @@ log_t init_log(const char *filename, enum log_severity severity) {
 }
 
 /**
+ * Devuelve el log del sistema si esta inicializado, NULL sino
+ * @param filename
+ * @param severity
+ */
+log_t logger_get_system_log() {
+    return system_log;
+}
+
+/**
+ * Setea un nuevo severity para el logger
+ * @param log
+ * @param severity
+ */
+void logger_set_log_severity(log_t log, enum log_severity severity) {
+    if (log == NULL) return;
+    log->severity = severity;
+}
+
+/**
+ * Devuelve el severity de un log
+ */
+enum log_severity logger_get_log_severity(log_t log) {
+    if (log == NULL)
+        return log_severity_error; // Arbitrary
+    return log->severity;
+}
+
+/**
  * Appendea un string a un log con un severity determinado
  * Solo lo hace si el severity del log esta seteado en un
  * nivel igual o inferior (mas verbose) que el pasado
@@ -95,7 +123,7 @@ log_t init_log(const char *filename, enum log_severity severity) {
  * @param log_severity
  * @param s
  */
-void append_to_log(log_t log, enum log_severity severity, const char *s, int argc, ...) {
+void logger_append_to_log(log_t log, enum log_severity severity, const char *s, int argc, ...) {
     if (!should_append_(log, severity)) return;
 
     va_list args;
@@ -137,7 +165,7 @@ void append_to_log(log_t log, enum log_severity severity, const char *s, int arg
  * Cierra un log especifico.
  * @param log
  */
-void close_log(log_t log) {
+void logger_close_log(log_t log) {
     if (log == NULL) return;
     free(log->filename);
     fclose(log->file);
@@ -148,9 +176,9 @@ void close_log(log_t log) {
  * Cierra el log del sistema.
  * @param log
  */
-void close_system_log() {
+void logger_close_system_log() {
     if (system_log == NULL) return;
-    close_log(system_log);
+    logger_close_log(system_log);
     system_log = NULL;
 }
 
@@ -165,7 +193,7 @@ static bool should_append_(log_t log, enum log_severity severity) {
 }
 
 /**
- * Idem funcion append_to_log pero sin chequeo y pasa el string final
+ * Idem funcion logger_append_to_log pero sin chequeo y pasa el string final
  * @param log
  * @param log_severity
  * @param s

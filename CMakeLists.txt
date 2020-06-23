@@ -14,9 +14,13 @@ set(SOURCE_FILES
         src/socks5/message/parser/auth_user_pass_parser.c
         src/socks5/message/parser/request_parser.c
         src/socks5/message/auth_user_pass_helper.c
+        src/socks5/sniffer/http_sniffer.c
+        src/socks5/sniffer/pop3_sniffer.c
         src/utils/sorted_hashmap.c
+        src/socks5/sniffer/sniffed_credentials.c
         src/utils/log_helper.c
         src/utils/byte_formatter.c
+        src/args_helper.c
         src/doh/doh.c
         src/doh/doh_response_parser.c
         src/utils/parser.c

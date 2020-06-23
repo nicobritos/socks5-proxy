@@ -6,6 +6,9 @@
 
 #define CHUNK_SIZE 10
 
+#define DNS_TYPE_A 0x01
+#define DNS_TYPE_AAAA 28
+
 /* Funciones auxiliares */
 void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
 
@@ -13,6 +16,18 @@ struct doh_response *
 add_char_to_code_description(struct doh_response *ans, char c, size_t *code_description_current_length);
 
 struct doh_response *error(struct doh_response *ans, http_response_parser_error_t error_type);
+
+struct doh_parser {
+    struct parser *parser;
+    int answer_qty;
+    size_t ttl_length;
+    int current_ip_byte;
+    size_t code_description_current_length;
+    uint32_t content_length;
+    uint32_t bytes_read;
+    bool reading_data;
+    size_t data_length;
+};
 
 // definiciÃ³n de maquina
 
@@ -68,18 +83,29 @@ enum states {
     ST_SKIP_11, // query type 1
     ST_SKIP_12, // query type 2
     ST_SKIP_13, // query class 1
-    ST_SKIP_14, // query class 2
-    ST_SKIP_15, // ans name 1,
-    ST_SKIP_16, // ans name 2
-    ST_SKIP_17, // ans type 1
-    ST_SKIP_18, // ans type 2
-    ST_SKIP_19, // ans class 1
-    ST_SKIP_20, // ans class 2
-    ST_TTL_1,
+    ST_SKIP_14,
+    ST_ANS_1, // query class 2
+    ST_ANS_2, // ans name 1,
+    ST_CLASS_1, // ans name 2
+    ST_CLASS_2, // ans class 1
+    ST_TYPE_1, // ans type 1
+    ST_TYPE_2, // ans type 2
+    ST_SKIP_TYPE_2, // ans type 2
+    ST_SKIP_CLASS_1, // ans class 1
+    ST_SKIP_CLASS_2, // ans class 2
+    ST_TTL_1, // ans class 2
     ST_TTL_2,
     ST_TTL_3,
     ST_TTL_4,
-    ST_DATA_LENGTH_0,
+    ST_DATA_LENGTH_1,
+    ST_DATA_LENGTH_2,
+    ST_SKIP_ANSWER_TTL_1,
+    ST_SKIP_ANSWER_TTL_2,
+    ST_SKIP_ANSWER_TTL_3,
+    ST_SKIP_ANSWER_TTL_4,
+    ST_SKIP_DATA_LENGTH_1,
+    ST_SKIP_DATA_LENGTH_2,
+    ST_SKIP_DATA,
     ST_IP_4_ADDRESS_1,
     ST_IP_4_ADDRESS_2,
     ST_IP_4_ADDRESS_3,
@@ -106,6 +132,7 @@ enum states {
 
 enum event_type {
     SUCCESS,
+    CONTENT_LENGTH_N_T,
     COPY_STATUS_1,
     COPY_STATUS_2,
     COPY_STATUS_3,
@@ -121,18 +148,9 @@ enum event_type {
     COPY_ADDR_4,
     COPY_ADDR_6,
     START_COUNTING_BYTES,
+    SET_DATA_LENGTH,
     INVALID_INPUT_FORMAT_T,
-};
-
-struct doh_parser {
-    struct parser *parser;
-    int answer_qty;
-    int ttl_length;
-    int current_ip_byte;
-    size_t code_description_current_length;
-    uint32_t length;
-    uint32_t bytes_read;
-    bool reading_data;
+    HI,
 };
 
 static void
@@ -144,7 +162,7 @@ next_state(struct parser_event *ret, const uint8_t c) {
 
 static void
 process_content_length_number(struct parser_event *ret, const uint8_t c) {
-    ret->type = ST_CONTENT_LENGTH_N;
+    ret->type = CONTENT_LENGTH_N_T;
     ret->n = 1;
     ret->data[0] = c;
 }
@@ -254,9 +272,23 @@ invalid_input(struct parser_event *ret, const uint8_t c) {
     ret->data[0] = c;
 }
 
+static unsigned
+skip_data(void *attachment, const uint8_t c) {
+    struct doh_parser *p = attachment;
+    (p->data_length)--;
+    return p->data_length > 0 ? ST_SKIP_DATA : ST_ANS_1;
+}
+
 static void
 set_reading_data(struct parser_event *ret, const uint8_t c) {
     ret->type = START_COUNTING_BYTES;
+    ret->n = 1;
+    ret->data[0] = c;
+}
+
+static void
+set_data_length(struct parser_event *ret, const uint8_t c) {
+    ret->type = SET_DATA_LENGTH;
     ret->n = 1;
     ret->data[0] = c;
 }
@@ -370,7 +402,7 @@ static const struct parser_state_transition HEADERS[] = {
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_1[] = {
+static const struct parser_state_transition CONTENT_LENGTH_1[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = 'O', .dest = ST_CONTENT_LENGTH_2, .act1 = next_state,},
@@ -378,7 +410,7 @@ static const struct parser_state_transition HEADER_CONTENT_LENGTH_1[] = {
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_2[] = {
+static const struct parser_state_transition CONTENT_LENGTH_2[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = 'N', .dest = ST_CONTENT_LENGTH_3, .act1 = next_state,},
@@ -386,7 +418,7 @@ static const struct parser_state_transition HEADER_CONTENT_LENGTH_2[] = {
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_3[] = {
+static const struct parser_state_transition CONTENT_LENGTH_3[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = 'T', .dest = ST_CONTENT_LENGTH_4, .act1 = next_state,},
@@ -394,7 +426,7 @@ static const struct parser_state_transition HEADER_CONTENT_LENGTH_3[] = {
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_4[] = {
+static const struct parser_state_transition CONTENT_LENGTH_4[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = 'E', .dest = ST_CONTENT_LENGTH_5, .act1 = next_state,},
@@ -402,7 +434,7 @@ static const struct parser_state_transition HEADER_CONTENT_LENGTH_4[] = {
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_5[] = {
+static const struct parser_state_transition CONTENT_LENGTH_5[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = 'N', .dest = ST_CONTENT_LENGTH_6, .act1 = next_state,},
@@ -410,7 +442,7 @@ static const struct parser_state_transition HEADER_CONTENT_LENGTH_5[] = {
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_6[] = {
+static const struct parser_state_transition CONTENT_LENGTH_6[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = 'T', .dest = ST_CONTENT_LENGTH_7, .act1 = next_state,},
@@ -418,14 +450,14 @@ static const struct parser_state_transition HEADER_CONTENT_LENGTH_6[] = {
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_7[] = {
+static const struct parser_state_transition CONTENT_LENGTH_7[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = '-', .dest = ST_CONTENT_LENGTH_8, .act1 = next_state,},
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_8[] = {
+static const struct parser_state_transition CONTENT_LENGTH_8[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = 'L', .dest = ST_CONTENT_LENGTH_9, .act1 = next_state,},
@@ -433,7 +465,7 @@ static const struct parser_state_transition HEADER_CONTENT_LENGTH_8[] = {
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_9[] = {
+static const struct parser_state_transition CONTENT_LENGTH_9[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = 'E', .dest = ST_CONTENT_LENGTH_10, .act1 = next_state,},
@@ -441,7 +473,7 @@ static const struct parser_state_transition HEADER_CONTENT_LENGTH_9[] = {
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_10[] = {
+static const struct parser_state_transition CONTENT_LENGTH_10[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = 'N', .dest = ST_CONTENT_LENGTH_11, .act1 = next_state,},
@@ -449,7 +481,7 @@ static const struct parser_state_transition HEADER_CONTENT_LENGTH_10[] = {
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_11[] = {
+static const struct parser_state_transition CONTENT_LENGTH_11[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = 'G', .dest = ST_CONTENT_LENGTH_12, .act1 = next_state,},
@@ -457,7 +489,7 @@ static const struct parser_state_transition HEADER_CONTENT_LENGTH_11[] = {
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_12[] = {
+static const struct parser_state_transition CONTENT_LENGTH_12[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = 'T', .dest = ST_CONTENT_LENGTH_13, .act1 = next_state,},
@@ -465,7 +497,7 @@ static const struct parser_state_transition HEADER_CONTENT_LENGTH_12[] = {
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_13[] = {
+static const struct parser_state_transition CONTENT_LENGTH_13[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = 'H', .dest = ST_CONTENT_LENGTH_14, .act1 = next_state,},
@@ -473,14 +505,14 @@ static const struct parser_state_transition HEADER_CONTENT_LENGTH_13[] = {
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_14[] = {
+static const struct parser_state_transition CONTENT_LENGTH_14[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = ':', .dest = ST_CONTENT_LENGTH_N, .act1 = next_state,},
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
-static const struct parser_state_transition HEADER_CONTENT_LENGTH_N[] = {
+static const struct parser_state_transition CONTENT_LENGTH_N[] = {
         {.when = '\r', .dest = ST_HEADER_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
         {.when = '\t', .dest = ST_CONTENT_LENGTH_N, .act1 = next_state,},
@@ -501,18 +533,24 @@ static const struct parser_state_transition HEADER_CONTENT_LENGTH_N[] = {
 static const struct parser_state_transition HEADER_POSSIBLE_END[] = {
         {.when = '\n', .dest = ST_HEADER_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
+        {.when = 'C', .dest = ST_CONTENT_LENGTH_1, .act1 = next_state,},
+        {.when = 'c', .dest = ST_CONTENT_LENGTH_1, .act1 = next_state,},
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
 static const struct parser_state_transition HEADER_END[] = {
         {.when = '\r', .dest = ST_HEADERS_POSSIBLE_END, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
+        {.when = 'C', .dest = ST_CONTENT_LENGTH_1, .act1 = next_state,},
+        {.when = 'c', .dest = ST_CONTENT_LENGTH_1, .act1 = next_state,},
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
 static const struct parser_state_transition HEADERS_POSSIBLE_END[] = {
         {.when = '\n', .dest = ST_DATA, .act1 = next_state,},
         {.when = '\0', .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
+        {.when = 'C', .dest = ST_CONTENT_LENGTH_1, .act1 = next_state,},
+        {.when = 'c', .dest = ST_CONTENT_LENGTH_1, .act1 = next_state,},
         {.when = ANY, .dest = ST_HEADERS, .act1 = next_state,},
 };
 
@@ -570,7 +608,7 @@ static const struct parser_state_transition SKIP_10[] = {
 };
 
 static const struct parser_state_transition QUERY_NAME[] = {
-        {.when = '\0', .dest = ST_SKIP_10, .act1 = next_state,},
+        {.when = '\0', .dest = ST_SKIP_11, .act1 = next_state,},
         {.when = ANY, .dest = ST_QUERY_NAME, .act1 = next_state,},
 };
 
@@ -587,54 +625,103 @@ static const struct parser_state_transition SKIP_13[] = {
 };
 
 static const struct parser_state_transition SKIP_14[] = {
-        {.when = ANY, .dest = ST_SKIP_15, .act1 = next_state,},
+        {.when = ANY, .dest = ST_ANS_1, .act1 = next_state,},
 };
 
-static const struct parser_state_transition SKIP_15[] = {
-        {.when = ANY, .dest = ST_SKIP_16, .act1 = next_state,},
+static const struct parser_state_transition ANS_1[] = {
+        {.when = ANY, .dest = ST_ANS_2, .act1 = next_state,},
 };
 
-static const struct parser_state_transition SKIP_16[] = {
-        {.when = ANY, .dest = ST_SKIP_17, .act1 = next_state,},
+static const struct parser_state_transition ANS_2[] = {
+        {.when = ANY, .dest = ST_TYPE_1, .act1 = next_state,},
 };
 
-static const struct parser_state_transition SKIP_17[] = {
-        {.when = ANY, .dest = ST_SKIP_18, .act1 = next_state,},
+// TYPE
+static const struct parser_state_transition TYPE_1[] = {
+        {.when = '\0', .dest = ST_TYPE_2, .act1 = next_state,},
+        {.when = ANY, .dest = ST_SKIP_TYPE_2, .act1 = next_state,},
 };
 
-static const struct parser_state_transition SKIP_18[] = {
-        {.when = ANY, .dest = ST_SKIP_19, .act1 = next_state,},
+static const struct parser_state_transition SKIP_TYPE_2[] = {
+        {.when = ANY, .dest = ST_SKIP_CLASS_1, .act1 = next_state,},
 };
 
-static const struct parser_state_transition SKIP_19[] = {
-        {.when = ANY, .dest = ST_SKIP_20, .act1 = next_state,},
+static const struct parser_state_transition TYPE_2[] = {
+        {.when = DNS_TYPE_A, .dest = ST_CLASS_1, .act1 = next_state,},
+        {.when = DNS_TYPE_AAAA, .dest = ST_CLASS_1, .act1 = next_state,},
+        {.when = ANY, .dest = ST_SKIP_CLASS_1, .act1 = next_state,},
 };
 
-static const struct parser_state_transition SKIP_20[] = {
-        {.when = ANY, .dest = ST_TTL_1, .act1 = copy_ttl_1,},
+// Class
+static const struct parser_state_transition CLASS_1[] = {
+        {.when = ANY, .dest = ST_CLASS_2, .act1 = next_state,},
+};
+
+static const struct parser_state_transition CLASS_2[] = {
+        {.when = ANY, .dest = ST_TTL_1, .act1 = next_state,},
+};
+
+static const struct parser_state_transition SKIP_CLASS_1[] = {
+        {.when = ANY, .dest = ST_SKIP_CLASS_2, .act1 = next_state,},
+};
+
+static const struct parser_state_transition SKIP_CLASS_2[] = {
+        {.when = ANY, .dest = ST_SKIP_ANSWER_TTL_1, .act1 = next_state,},
 };
 
 static const struct parser_state_transition TTL_1[] = {
-        {.when = ANY, .dest = ST_TTL_2, .act1 = copy_ttl_2,},
+        {.when = ANY, .dest = ST_TTL_2, .act1 = copy_ttl_1,},
 };
 
 static const struct parser_state_transition TTL_2[] = {
-        {.when = ANY, .dest = ST_TTL_3, .act1 = copy_ttl_3,},
+        {.when = ANY, .dest = ST_TTL_3, .act1 = copy_ttl_2,},
 };
 
 static const struct parser_state_transition TTL_3[] = {
-        {.when = ANY, .dest = ST_TTL_4, .act1 = copy_ttl_4,},
+        {.when = ANY, .dest = ST_TTL_4, .act1 = copy_ttl_3,},
 };
 
 static const struct parser_state_transition TTL_4[] = {
-        {.when = '\0', .dest = ST_DATA_LENGTH_0, .act1 = next_state,},
+        {.when = ANY, .dest = ST_DATA_LENGTH_1, .act1 = copy_ttl_4,},
+};
+
+static const struct parser_state_transition SKIP_ANSWER_TTL_1[] = {
+        {.when = ANY, .dest = ST_SKIP_ANSWER_TTL_2, .act1 = next_state,},
+};
+
+static const struct parser_state_transition SKIP_ANSWER_TTL_2[] = {
+        {.when = ANY, .dest = ST_SKIP_ANSWER_TTL_3, .act1 = next_state,},
+};
+
+static const struct parser_state_transition SKIP_ANSWER_TTL_3[] = {
+        {.when = ANY, .dest = ST_SKIP_ANSWER_TTL_4, .act1 = next_state,},
+};
+
+static const struct parser_state_transition SKIP_ANSWER_TTL_4[] = {
+        {.when = ANY, .dest = ST_SKIP_DATA_LENGTH_1, .act1 = next_state,},
+};
+
+static const struct parser_state_transition DATA_LENGTH_1[] = {
+        {.when = '\0', .dest = ST_DATA_LENGTH_2, .act1 = next_state,},
         {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
 
-static const struct parser_state_transition DATA_LENGTH_0[] = {
+static const struct parser_state_transition DATA_LENGTH_2[] = {
         {.when = 4, .dest = ST_IP_4_ADDRESS_1, .act1 = next_state,},
         {.when = 16, .dest = ST_IP_6_ADDRESS_1, .act1 = next_state,},
         {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
+};
+
+static const struct parser_state_transition SKIP_DATA_LENGTH_1[] = {
+        {.when = ANY, .dest = ST_SKIP_DATA_LENGTH_2, .act1 = set_data_length,},
+};
+
+static const struct parser_state_transition SKIP_DATA_LENGTH_2[] = {
+        {.when = ANY, .dest = ST_SKIP_DATA, .act1 = set_data_length,},
+};
+
+static const struct parser_state_transition SKIP_DATA[] = {
+        {.when = ANY, .dest_f = skip_data, .act1 = next_state},
 };
 
 static const struct parser_state_transition IP_4_ADDRESS_1[] = {
@@ -718,7 +805,7 @@ static const struct parser_state_transition IP_6_ADDRESS_16[] = {
 };
 
 static const struct parser_state_transition END_IP[] = {
-        {.when = ANY, .dest = ST_SKIP_15, .act1 = next_state,},
+        {.when = ANY, .dest = ST_ANS_2, .act1 = next_state,},
 };
 
 static const struct parser_state_transition INVALID_INPUT_FORMAT[] = {
@@ -726,181 +813,203 @@ static const struct parser_state_transition INVALID_INPUT_FORMAT[] = {
 };
 
 static const struct parser_state_transition *states[] = {
-        START,
-        H,
-        T,
-        T_2,
-        P,
-        BAR,
-        ONE,
-        DOT,
-        ONE_2,
-        SPACE,
-        STATUS_CODE_1,
-        STATUS_CODE_2,
-        STATUS_CODE_3,
-        CODE_DESC,
-        CODE_DESC_POSSIBLE_END,
-        HEADERS,
-        HEADER_CONTENT_LENGTH_1,
-        HEADER_CONTENT_LENGTH_2,
-        HEADER_CONTENT_LENGTH_3,
-        HEADER_CONTENT_LENGTH_4,
-        HEADER_CONTENT_LENGTH_5,
-        HEADER_CONTENT_LENGTH_6,
-        HEADER_CONTENT_LENGTH_7,
-        HEADER_CONTENT_LENGTH_8,
-        HEADER_CONTENT_LENGTH_9,
-        HEADER_CONTENT_LENGTH_10,
-        HEADER_CONTENT_LENGTH_11,
-        HEADER_CONTENT_LENGTH_12,
-        HEADER_CONTENT_LENGTH_13,
-        HEADER_CONTENT_LENGTH_14,
-        HEADER_CONTENT_LENGTH_N,
-        HEADER_POSSIBLE_END,
-        HEADER_END,
-        HEADERS_POSSIBLE_END,
-        DATA, // Primer byte del data (transaction id 1)
-        SKIP_1, // transaction id 2
-        SKIP_2, // dns flags 1
-        SKIP_3, // dns flags 2
-        SKIP_4, // questions 1
-        SKIP_5, // questions 2
-        SKIP_6,
-        ANSWERS_QTY_1,
-        ANSWERS_QTY_2,
-        SKIP_7, // authority 1
-        SKIP_8, // authority 2
-        SKIP_9, // additional 1
-        SKIP_10, // additional 2
-        QUERY_NAME,
-        SKIP_11, // query type 1
-        SKIP_12, // query type 2
-        SKIP_13, // query class 1
-        SKIP_14, // query class 2
-        SKIP_15, // ans name 1,
-        SKIP_16, // ans name 2
-        SKIP_17, // ans type 1
-        SKIP_18, // ans type 2
-        SKIP_19, // ans class 1
-        SKIP_20,
-        TTL_1,
-        TTL_2,
-        TTL_3,
-        TTL_4,
-        DATA_LENGTH_0,
-        IP_4_ADDRESS_1,
-        IP_4_ADDRESS_2,
-        IP_4_ADDRESS_3,
-        IP_4_ADDRESS_4,
-        IP_6_ADDRESS_1,
-        IP_6_ADDRESS_2,
-        IP_6_ADDRESS_3,
-        IP_6_ADDRESS_4,
-        IP_6_ADDRESS_5,
-        IP_6_ADDRESS_6,
-        IP_6_ADDRESS_7,
-        IP_6_ADDRESS_8,
-        IP_6_ADDRESS_9,
-        IP_6_ADDRESS_10,
-        IP_6_ADDRESS_11,
-        IP_6_ADDRESS_12,
-        IP_6_ADDRESS_13,
-        IP_6_ADDRESS_14,
-        IP_6_ADDRESS_15,
-        IP_6_ADDRESS_16,
-        END_IP,
-        INVALID_INPUT_FORMAT,
+    START,
+    H,
+    T,
+    T_2,
+    P,
+    BAR,
+    ONE,
+    DOT,
+    ONE_2,
+    SPACE,
+    STATUS_CODE_1,
+    STATUS_CODE_2,
+    STATUS_CODE_3,
+    CODE_DESC,
+    CODE_DESC_POSSIBLE_END,
+    HEADERS,
+    CONTENT_LENGTH_1,
+    CONTENT_LENGTH_2,
+    CONTENT_LENGTH_3,
+    CONTENT_LENGTH_4,
+    CONTENT_LENGTH_5,
+    CONTENT_LENGTH_6,
+    CONTENT_LENGTH_7,
+    CONTENT_LENGTH_8,
+    CONTENT_LENGTH_9,
+    CONTENT_LENGTH_10,
+    CONTENT_LENGTH_11,
+    CONTENT_LENGTH_12,
+    CONTENT_LENGTH_13,
+    CONTENT_LENGTH_14,
+    CONTENT_LENGTH_N,
+    HEADER_POSSIBLE_END,
+    HEADER_END,
+    HEADERS_POSSIBLE_END,
+    DATA,
+    SKIP_1,
+    SKIP_2,
+    SKIP_3,
+    SKIP_4,
+    SKIP_5,
+    SKIP_6,
+    ANSWERS_QTY_1,
+    ANSWERS_QTY_2,
+    SKIP_7,
+    SKIP_8,
+    SKIP_9,
+    SKIP_10,
+    QUERY_NAME,
+    SKIP_11,
+    SKIP_12,
+    SKIP_13,
+    SKIP_14,
+    ANS_1,
+    ANS_2,
+    CLASS_1,
+    CLASS_2,
+    TYPE_1,
+    TYPE_2,
+    SKIP_TYPE_2,
+    SKIP_CLASS_1,
+    SKIP_CLASS_2,
+    TTL_1,
+    TTL_2,
+    TTL_3,
+    TTL_4,
+    DATA_LENGTH_1,
+    DATA_LENGTH_2,
+    SKIP_ANSWER_TTL_1,
+    SKIP_ANSWER_TTL_2,
+    SKIP_ANSWER_TTL_3,
+    SKIP_ANSWER_TTL_4,
+    SKIP_DATA_LENGTH_1,
+    SKIP_DATA_LENGTH_2,
+    SKIP_DATA,
+    IP_4_ADDRESS_1,
+    IP_4_ADDRESS_2,
+    IP_4_ADDRESS_3,
+    IP_4_ADDRESS_4,
+    IP_6_ADDRESS_1,
+    IP_6_ADDRESS_2,
+    IP_6_ADDRESS_3,
+    IP_6_ADDRESS_4,
+    IP_6_ADDRESS_5,
+    IP_6_ADDRESS_6,
+    IP_6_ADDRESS_7,
+    IP_6_ADDRESS_8,
+    IP_6_ADDRESS_9,
+    IP_6_ADDRESS_10,
+    IP_6_ADDRESS_11,
+    IP_6_ADDRESS_12,
+    IP_6_ADDRESS_13,
+    IP_6_ADDRESS_14,
+    IP_6_ADDRESS_15,
+    IP_6_ADDRESS_16,
+    END_IP,
+    INVALID_INPUT_FORMAT,
 };
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
 static const size_t states_n[] = {
-        N(START),
-        N(H),
-        N(T),
-        N(T_2),
-        N(P),
-        N(BAR),
-        N(ONE),
-        N(DOT),
-        N(ONE_2),
-        N(SPACE),
-        N(STATUS_CODE_1),
-        N(STATUS_CODE_2),
-        N(STATUS_CODE_3),
-        N(CODE_DESC),
-        N(CODE_DESC_POSSIBLE_END),
-        N(HEADERS),
-        N(HEADER_CONTENT_LENGTH_1),
-        N(HEADER_CONTENT_LENGTH_2),
-        N(HEADER_CONTENT_LENGTH_3),
-        N(HEADER_CONTENT_LENGTH_4),
-        N(HEADER_CONTENT_LENGTH_5),
-        N(HEADER_CONTENT_LENGTH_6),
-        N(HEADER_CONTENT_LENGTH_7),
-        N(HEADER_CONTENT_LENGTH_8),
-        N(HEADER_CONTENT_LENGTH_9),
-        N(HEADER_CONTENT_LENGTH_10),
-        N(HEADER_CONTENT_LENGTH_11),
-        N(HEADER_CONTENT_LENGTH_12),
-        N(HEADER_CONTENT_LENGTH_13),
-        N(HEADER_CONTENT_LENGTH_14),
-        N(HEADER_CONTENT_LENGTH_N),
-        N(HEADER_POSSIBLE_END),
-        N(HEADER_END),
-        N(HEADERS_POSSIBLE_END),
-        N(DATA),
-        N(SKIP_1),
-        N(SKIP_2),
-        N(SKIP_3),
-        N(SKIP_4),
-        N(SKIP_5),
-        N(SKIP_6),
-        N(ANSWERS_QTY_1),
-        N(ANSWERS_QTY_2),
-        N(SKIP_7),
-        N(SKIP_8),
-        N(SKIP_9),
-        N(SKIP_10),
-        N(QUERY_NAME),
-        N(SKIP_11),
-        N(SKIP_12),
-        N(SKIP_13),
-        N(SKIP_14),
-        N(SKIP_15),
-        N(SKIP_16),
-        N(SKIP_17),
-        N(SKIP_18),
-        N(SKIP_19),
-        N(SKIP_20),
-        N(TTL_1),
-        N(TTL_2),
-        N(TTL_3),
-        N(TTL_4),
-        N(DATA_LENGTH_0),
-        N(IP_4_ADDRESS_1),
-        N(IP_4_ADDRESS_2),
-        N(IP_4_ADDRESS_3),
-        N(IP_4_ADDRESS_4),
-        N(IP_6_ADDRESS_1),
-        N(IP_6_ADDRESS_2),
-        N(IP_6_ADDRESS_3),
-        N(IP_6_ADDRESS_4),
-        N(IP_6_ADDRESS_5),
-        N(IP_6_ADDRESS_6),
-        N(IP_6_ADDRESS_7),
-        N(IP_6_ADDRESS_8),
-        N(IP_6_ADDRESS_9),
-        N(IP_6_ADDRESS_10),
-        N(IP_6_ADDRESS_11),
-        N(IP_6_ADDRESS_12),
-        N(IP_6_ADDRESS_13),
-        N(IP_6_ADDRESS_14),
-        N(IP_6_ADDRESS_15),
-        N(IP_6_ADDRESS_16),
-        N(END_IP),
-        N(INVALID_INPUT_FORMAT),
+    N(START),
+    N(H),
+    N(T),
+    N(T_2),
+    N(P),
+    N(BAR),
+    N(ONE),
+    N(DOT),
+    N(ONE_2),
+    N(SPACE),
+    N(STATUS_CODE_1),
+    N(STATUS_CODE_2),
+    N(STATUS_CODE_3),
+    N(CODE_DESC),
+    N(CODE_DESC_POSSIBLE_END),
+    N(HEADERS),
+    N(CONTENT_LENGTH_1),
+    N(CONTENT_LENGTH_2),
+    N(CONTENT_LENGTH_3),
+    N(CONTENT_LENGTH_4),
+    N(CONTENT_LENGTH_5),
+    N(CONTENT_LENGTH_6),
+    N(CONTENT_LENGTH_7),
+    N(CONTENT_LENGTH_8),
+    N(CONTENT_LENGTH_9),
+    N(CONTENT_LENGTH_10),
+    N(CONTENT_LENGTH_11),
+    N(CONTENT_LENGTH_12),
+    N(CONTENT_LENGTH_13),
+    N(CONTENT_LENGTH_14),
+    N(CONTENT_LENGTH_N),
+    N(HEADER_POSSIBLE_END),
+    N(HEADER_END),
+    N(HEADERS_POSSIBLE_END),
+    N(DATA),
+    N(SKIP_1),
+    N(SKIP_2),
+    N(SKIP_3),
+    N(SKIP_4),
+    N(SKIP_5),
+    N(SKIP_6),
+    N(ANSWERS_QTY_1),
+    N(ANSWERS_QTY_2),
+    N(SKIP_7),
+    N(SKIP_8),
+    N(SKIP_9),
+    N(SKIP_10),
+    N(QUERY_NAME),
+    N(SKIP_11),
+    N(SKIP_12),
+    N(SKIP_13),
+    N(SKIP_14),
+    N(ANS_1),
+    N(ANS_2),
+    N(CLASS_1),
+    N(CLASS_2),
+    N(TYPE_1),
+    N(TYPE_2),
+    N(SKIP_TYPE_2),
+    N(SKIP_CLASS_1),
+    N(SKIP_CLASS_2),
+    N(TTL_1),
+    N(TTL_2),
+    N(TTL_3),
+    N(TTL_4),
+    N(DATA_LENGTH_1),
+    N(DATA_LENGTH_2),
+    N(SKIP_ANSWER_TTL_1),
+    N(SKIP_ANSWER_TTL_2),
+    N(SKIP_ANSWER_TTL_3),
+    N(SKIP_ANSWER_TTL_4),
+    N(SKIP_DATA_LENGTH_1),
+    N(SKIP_DATA_LENGTH_2),
+    N(SKIP_DATA),
+    N(IP_4_ADDRESS_1),
+    N(IP_4_ADDRESS_2),
+    N(IP_4_ADDRESS_3),
+    N(IP_4_ADDRESS_4),
+    N(IP_6_ADDRESS_1),
+    N(IP_6_ADDRESS_2),
+    N(IP_6_ADDRESS_3),
+    N(IP_6_ADDRESS_4),
+    N(IP_6_ADDRESS_5),
+    N(IP_6_ADDRESS_6),
+    N(IP_6_ADDRESS_7),
+    N(IP_6_ADDRESS_8),
+    N(IP_6_ADDRESS_9),
+    N(IP_6_ADDRESS_10),
+    N(IP_6_ADDRESS_11),
+    N(IP_6_ADDRESS_12),
+    N(IP_6_ADDRESS_13),
+    N(IP_6_ADDRESS_14),
+    N(IP_6_ADDRESS_15),
+    N(IP_6_ADDRESS_16),
+    N(END_IP),
+    N(INVALID_INPUT_FORMAT),
 };
 
 static struct parser_definition definition = {
@@ -926,6 +1035,7 @@ struct doh_response *doh_response_parser_init() {
         free(ans);
         return NULL;
     }
+    parser_set_attachment(ans->_doh_parser->parser, ans->_doh_parser);
 
     return ans;
 }
@@ -933,15 +1043,13 @@ struct doh_response *doh_response_parser_init() {
 bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, size_t s_length) {
     if (doh_response == NULL) 
         return false;
-    
+
     for (size_t i = 0; i < s_length; i++) {
         const struct parser_event *ret = parser_feed(doh_response->_doh_parser->parser, s[i]);
-        if (doh_response->_doh_parser->reading_data)
-            doh_response->_doh_parser->bytes_read++;
 
         switch (ret->type) {
-            case ST_CONTENT_LENGTH_N:
-                doh_response->_doh_parser->length = doh_response->_doh_parser->length * 10 + (ret->data[0] - '0');
+            case CONTENT_LENGTH_N_T:
+                doh_response->_doh_parser->content_length = doh_response->_doh_parser->content_length * 10 + (ret->data[0] - '0');
                 break;
             case COPY_STATUS_1:
                 doh_response->status_code = ((ret->data[0]) - '0') * 100;
@@ -982,16 +1090,16 @@ bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, siz
                 }
                 break;
             case COPY_TTL_1:
-                doh_response->ttl[doh_response->_doh_parser->ttl_length] = ret->data[0] * 512; // 8^3
+                doh_response->ttl[doh_response->_doh_parser->ttl_length] = ret->data[0] * 16777216; // 2^24
                 break;
             case COPY_TTL_2:
-                doh_response->ttl[doh_response->_doh_parser->ttl_length] += ret->data[0] * 64; // 8^2
+                doh_response->ttl[doh_response->_doh_parser->ttl_length] += ret->data[0] * 65536; // 2^16
                 break;
             case COPY_TTL_3:
-                doh_response->ttl[doh_response->_doh_parser->ttl_length] += ret->data[0] * 8; // 8^1
+                doh_response->ttl[doh_response->_doh_parser->ttl_length] += ret->data[0] * 256; // 2^8
                 break;
             case COPY_TTL_4:
-                doh_response->ttl[doh_response->_doh_parser->ttl_length++] += ret->data[0]; // 8^0
+                doh_response->ttl[doh_response->_doh_parser->ttl_length++] += ret->data[0]; // 2^0
                 break;
             case COPY_ADDR_4:
                 if (doh_response->ipv4_qty >= doh_response->_doh_parser->answer_qty) {
@@ -1021,13 +1129,21 @@ bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, siz
             case START_COUNTING_BYTES:
                 doh_response->_doh_parser->reading_data = true;
                 break;
+            case SET_DATA_LENGTH:
+                doh_response->_doh_parser->data_length <<= 8u;
+                doh_response->_doh_parser->data_length |= ret->data[0];
+                break;
             case INVALID_INPUT_FORMAT_T:
                 parser_destroy(doh_response->_doh_parser->parser);
                 doh_response->_doh_parser->parser = NULL;
                 return error(doh_response, INVALID_INPUT_FORMAT_ERROR);
+            default:
+                break;
         }
-    }
 
+        if (doh_response->_doh_parser->reading_data)
+            doh_response->_doh_parser->bytes_read++;
+    }
     if (doh_response_parser_is_done(doh_response)) {
         parser_destroy(doh_response->_doh_parser->parser);
         doh_response->_doh_parser->parser = NULL;
@@ -1038,7 +1154,6 @@ bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, siz
         if (doh_response->ipv6_qty > 0 && doh_response->_doh_parser->current_ip_byte != 0) {
             return error(doh_response, INVALID_INPUT_FORMAT_ERROR);
         }
-
         return true;
     }
 
@@ -1046,13 +1161,13 @@ bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, siz
 }
 
 bool doh_response_parser_is_done(struct doh_response *doh_response) {
-    if (doh_response == NULL || doh_response->_doh_parser == NULL)
+    if (doh_response == NULL || doh_response->_doh_parser == NULL || doh_response_parser_error(doh_response))
         return true;
-    return doh_response->_doh_parser->bytes_read >= doh_response->_doh_parser->length;
+    return doh_response->_doh_parser->bytes_read >= doh_response->_doh_parser->content_length;
 }
 
 bool doh_response_parser_error(struct doh_response *doh_response) {
-    if (doh_response == NULL || doh_response->status_code != 200)
+    if (doh_response == NULL || doh_response->status_code < 200 || doh_response->status_code > 299)
         return true;
     return false;
 }
@@ -1061,11 +1176,19 @@ void doh_response_parser_free(struct doh_response *http_response) {
     if (http_response != NULL) {
         if (http_response->code_description != NULL) {
             free(http_response->code_description);
+            http_response->code_description = NULL;
         }
-        if (http_response->_doh_parser->parser != NULL) {
-            parser_destroy(http_response->_doh_parser->parser);
+
+        if (http_response->_doh_parser != NULL) {
+            if (http_response->_doh_parser->parser != NULL) {
+                parser_destroy(http_response->_doh_parser->parser);
+                http_response->_doh_parser->parser = NULL;
+            }
+
+            free(http_response->_doh_parser);
+            http_response->_doh_parser = NULL;
         }
-        free(http_response->_doh_parser);
+
         free(http_response);
     }
 }
@@ -1082,9 +1205,7 @@ add_char_to_code_description(struct doh_response *ans, char c, size_t *code_desc
 }
 
 struct doh_response *error(struct doh_response *ans, http_response_parser_error_t error_type) {
-//    doh_response_parser_free(ans);
-//    ans = calloc(1, sizeof(*ans));
-//    ans->status_code = error_type;
+    ans->status_code = error_type;
     return ans;
 }
 
@@ -1131,28 +1252,34 @@ int main(int argc, char ** argv){
     fclose(fp);
     buffer = realloc(buffer, i * sizeof(*buffer));
 
-    struct doh_response * ans = doh_response_parser_feed(buffer, i);
-    printf("%d\n", ans->status_code);
-    printf("%s\n", ans->code_description);
-    printf("IP V4: %d\n", ans->ipv4_qty);
-    for(int i=0; i<ans->ipv4_qty; i++){
-        for(int j=0; j<IP_4_BYTES; j++){
-            printf("%d.", ans->ipv4_addr[i].byte[j]);
+    struct doh_response * ans = doh_response_parser_init();
+    bool success = doh_response_parser_feed(ans,buffer, i);
+    free(buffer);
+    if(success){
+        printf("%d\n", ans->status_code);
+        printf("%s\n", ans->code_description);
+        printf("IP V4: %d\n", ans->ipv4_qty);
+        for(int i=0; i<ans->ipv4_qty; i++){
+            uint32_t copy = ans->ipv4_addr[i];
+            for(int j=0; j<IP_4_BYTES; j++){
+                uint32_t byte = copy%256;
+                printf("%d.", byte);
+                copy/=256;
+            }
+            printf("\n");
+            printf("TTL: %d secs\n", ans->ttl[i]);
         }
-        printf("\n");
-        printf("TTL: %d secs\n", ans->ttl[i]);
-    }
-    printf("IP V6: %d\n", ans->ipv6_qty);
-    for(int i=0; i<ans->ipv6_qty; i++){
-        for(int j=0; j<IP_6_BYTES; j+=2){
-            printf("%02X%02X:", ans->ipv6_addr[i].byte[j], ans->ipv6_addr[i].byte[j+1]);
-        }
-        printf("\n");
-        printf("TTL: %d secs\n", ans->ttl[i]);
+        printf("IP V6: %d\n", ans->ipv6_qty);
+        for(int i=0; i<ans->ipv6_qty; i++){
+            for(int j=0; j<IP_6_BYTES; j+=2){
+                printf("%02X%02X:", ans->ipv6_addr[i].byte[j], ans->ipv6_addr[i].byte[j+1]);
+            }
+            printf("\n");
+            printf("TTL: %d secs\n", ans->ttl[i]);
 
+        }
     }
     doh_response_parser_free(ans);
-    free(buffer);
     return 0;
 }
 */

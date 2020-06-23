@@ -1,7 +1,7 @@
 #ifndef PC_2020A_6_TPE_SOCKSV5_LOG_HELPER_H
 #define PC_2020A_6_TPE_SOCKSV5_LOG_HELPER_H
 
-#define LOG_LEVEL log_severity_debug
+#define DEFAULT_LOG_LEVEL log_severity_debug
 
 enum log_severity {
     log_severity_debug,
@@ -18,7 +18,7 @@ typedef struct log_CDT *log_t;
  * @param filename
  * @param severity
  */
-log_t init_system_log(const char *filename, enum log_severity severity);
+log_t logger_init_system_log(const char *filename, enum log_severity severity);
 
 /**
  * Inicializa un log especifico.
@@ -26,7 +26,26 @@ log_t init_system_log(const char *filename, enum log_severity severity);
  * @param filename
  * @param severity
  */
-log_t init_log(const char *filename, enum log_severity severity);
+log_t logger_init_log(const char *filename, enum log_severity severity);
+
+/**
+ * Devuelve el log del sistema si esta inicializado, NULL sino
+ * @param filename
+ * @param severity
+ */
+log_t logger_get_system_log();
+
+/**
+ * Setea un nuevo severity para el logger
+ * @param log
+ * @param severity
+ */
+void logger_set_log_severity(log_t log, enum log_severity severity);
+
+/**
+ * Devuelve el severity de un log
+ */
+enum log_severity logger_get_log_severity(log_t log);
 
 /**
  * Appendea un string a un log con un severity determinado
@@ -38,18 +57,18 @@ log_t init_log(const char *filename, enum log_severity severity);
  * @param s
  * @param argc la cantidad de argumentos
  */
-void append_to_log(log_t log, enum log_severity severity, const char *s, int argc, ...);
+void logger_append_to_log(log_t log, enum log_severity severity, const char *s, int argc, ...);
 
 /**
  * Cierra un log especifico.
  * @param log
  */
-void close_log(log_t log);
+void logger_close_log(log_t log);
 
 /**
  * Cierra el log del sistema.
  * @param log
  */
-void close_system_log();
+void logger_close_system_log();
 
 #endif //PC_2020A_6_TPE_SOCKSV5_LOG_HELPER_H

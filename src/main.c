@@ -25,6 +25,7 @@
 #include <limits.h>
 #include <arpa/inet.h>
 
+#include "args_helper.h"
 #include "utils/selector.h"
 #include "utils/log_helper.h"
 #include "socks5/socks5nio.h"
@@ -42,100 +43,41 @@ sigterm_handler(const int signal) {
     done = true;
 }
 
-static void
-init_configuration() {
-    configuration.doh.domain_name = DNS_SERVER_DOMAIN_NAME;
-    configuration.doh.sockaddr.ss_family = DNS_SERVER_AF;
-    configuration.doh.socklen = sizeof(configuration.doh.sockaddr);
-
-    struct sockaddr_in* in;
-    struct sockaddr_in6* in6;
-
-    switch (configuration.doh.sockaddr.ss_family) {
-        case AF_INET:
-            in = (struct sockaddr_in *) &configuration.doh.sockaddr;
-            in->sin_port = htons(DNS_SERVER_PORT);
-            inet_pton(
-                    AF_INET,
-                    DNS_SERVER_IP,
-                    &in->sin_addr);
-            break;
-        case AF_INET6:
-            in6 = (struct sockaddr_in6 *) &configuration.doh.sockaddr;
-            in6->sin6_port = htons(DNS_SERVER_PORT);
-            inet_pton(
-                    AF_INET6,
-                    DNS_SERVER_IP6,
-                    &in6->sin6_addr);
-            break;
-    }
-}
-
 int
-main(const int argc, const char **argv) {
-    log_t system_log = init_system_log(SYSTEM_LOG_FILENAME, LOG_LEVEL);
+main(const int argc, char **argv) {
+    log_t system_log = logger_init_system_log(SYSTEM_LOG_FILENAME, DEFAULT_LOG_LEVEL);
     if (system_log == NULL) fprintf(stderr, "Couldn't initialize system_log");
-    enum auth_user_pass_helper_status auth_status = auth_user_pass_helper_status_error_not_initialized;
-    unsigned port = 1080;
-    init_configuration();
 
-    if (argc == 1) {
-        // utilizamos el default
-    } else if (argc == 2) {
-        char *end = 0;
-        const long sl = strtol(argv[1], &end, 10);
+    enum auth_user_pass_helper_status auth_status = auth_user_pass_helper_init();
+    if (auth_status != auth_user_pass_helper_status_ok)
+        fprintf(stderr, "Error initializing authentication module with code: %d\n", auth_status);
 
-        if (end == argv[1] || '\0' != *end
-            || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)
-            || sl < 0 || sl > USHRT_MAX) {
-            fprintf(stderr, "Port should be an integer: %s\n", argv[1]);
-
-            if (system_log != NULL) {
-                append_to_log(system_log, log_severity_error, "Port should be an integer: %s", 1, argv[1]);
-            }
-            return 1;
-        }
-        port = sl;
-    } else {
-        fprintf(stderr, "Usage: %s <port>\n", argv[0]);
-        if (system_log != NULL) {
-            append_to_log(system_log, log_severity_error, "Usage: %s <port>", 1, argv[0]);
-        }
-        return 1;
-    }
+    parse_args(argc, argv);
 
     // no tenemos nada que leer de stdin
-    close(0);
+    close(STDIN_FILENO);
 
     const char *err_msg = NULL;
     selector_status ss = SELECTOR_SUCCESS;
     fd_selector selector = NULL;
 
-    struct sockaddr_in6 addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin6_family = AF_INET6;
-    addr.sin6_addr = in6addr_any;
-    addr.sin6_port = htons(port);
-
-    const int server = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
+    const int server = socket(configuration.socks5.sockaddr.ss_family, SOCK_STREAM, IPPROTO_TCP);
     if (server < 0) {
         err_msg = "Unable to create socket";
         goto finally;
     }
-
-    fprintf(stdout, "Listening on TCP port %d\n", port);
 
     // man 7 ip. no importa reportar nada si falla.
     setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int) {1}, sizeof(int));
     // Necesitamos desactivar esto para bindear a IPv4 e IPv6 al mismo tiempo
     setsockopt(server, IPPROTO_IPV6, IPV6_V6ONLY, &(int) {0}, sizeof(int));
 
-    if (bind(server, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+    if (bind(server, (struct sockaddr *) &configuration.socks5.sockaddr, sizeof(configuration.socks5.sockaddr)) < 0) {
         err_msg = "unable to bind socket";
         goto finally;
     }
 
-    if (listen(server, 1024) < 0) {
+    if (listen(server, 20) < 0) {
         err_msg = "unable to listen";
         goto finally;
     }
@@ -169,7 +111,7 @@ main(const int argc, const char **argv) {
         goto finally;
     }
     const struct fd_handler socksv5 = {
-            .handle_read       = socksv5_passive_accept,
+            .handle_read       = socks_passive_accept,
             .handle_write      = NULL,
             .handle_close      = NULL, // nada que liberar
     };
@@ -180,14 +122,24 @@ main(const int argc, const char **argv) {
         goto finally;
     }
 
-    auth_status = auth_user_pass_helper_init();
-    if (auth_status != auth_user_pass_helper_status_ok)
-        fprintf(stderr, "Error initializing authentication module with code: %d\n", auth_status);
-    if (system_log != NULL) {
-        append_to_log(system_log, log_severity_info, "Server up with TCP port %d", 1, port);
+
+    if (configuration.socks5.sockaddr.ss_family == AF_INET) {
+        uint16_t port = ntohs(((struct sockaddr_in *)&configuration.socks5.sockaddr)->sin_port);
+        fprintf(stdout, "Listening on TCP port %d on IPv4 and IPv6\n", port);
+
+        if (system_log != NULL) {
+            logger_append_to_log(system_log, log_severity_info, "Server up with TCP port %d on IPv4 and IPv6", 1, port);
+        }
+    } else {
+        uint16_t port = ntohs(((struct sockaddr_in6 *)&configuration.socks5.sockaddr)->sin6_port);
+        fprintf(stdout, "Listening on TCP port %d on IPv6\n", port);
+
+        if (system_log != NULL) {
+            logger_append_to_log(system_log, log_severity_info, "Server up with TCP port %d on IPv6", 1, port);
+        }
     }
 
-    socksv5_init();
+    socks_init();
     for (; !done;) {
         err_msg = NULL;
         ss = selector_select(selector);
@@ -208,16 +160,16 @@ main(const int argc, const char **argv) {
                 ? strerror(errno)
                 : selector_error(ss));
         if (system_log != NULL) {
-            append_to_log(system_log, log_severity_error, "%s: %s", 2,
-                    (err_msg == NULL) ? "" : err_msg,
-                    ss == SELECTOR_IO ? strerror(errno) : selector_error(ss)
+            logger_append_to_log(system_log, log_severity_error, "%s: %s", 2,
+                                 (err_msg == NULL) ? "" : err_msg,
+                                 ss == SELECTOR_IO ? strerror(errno) : selector_error(ss)
             );
         }
         ret = 2;
     } else if (err_msg) {
         perror(err_msg);
         if (system_log != NULL) {
-            append_to_log(system_log, log_severity_error, "%s: %s", 2, err_msg, strerror(errno));
+            logger_append_to_log(system_log, log_severity_error, "%s: %s", 2, err_msg, strerror(errno));
         }
         ret = 1;
     }
@@ -226,9 +178,9 @@ main(const int argc, const char **argv) {
     }
     selector_close();
 
-    socksv5_pool_destroy();
+    socks_pool_destroy();
     if (system_log != NULL) {
-        close_system_log();
+        logger_close_system_log();
         system_log = NULL;
     }
 

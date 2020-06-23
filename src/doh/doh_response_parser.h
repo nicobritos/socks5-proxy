@@ -22,7 +22,7 @@
 typedef enum errors{
     INVALID_INPUT_FORMAT_ERROR,  // Si el string de entrada no estaba en algun formato vÃ¡lido de respuesta HTTP (1.1)
     REALLOC_ERROR,               // Si al hacer un realloc se produjo algun error
-}http_response_parser_error_t;
+} http_response_parser_error_t;
 
 typedef struct {
   uint8_t byte[IP_6_BYTES]; // en orden inverso
@@ -31,7 +31,7 @@ typedef struct {
 struct doh_response {
     uint16_t status_code;
     char * code_description;
-    unsigned int ttl[MAX_ADDR]; // Time To Live (in seconds)
+    uint32_t ttl[MAX_ADDR]; // Time To Live (in seconds)
     int ipv4_qty; // Cantidad de ips en el array ipv4_addr
     uint32_t ipv4_addr[MAX_ADDR];
     int ipv6_qty; // Cantidad de ips en el array ipv6_addr

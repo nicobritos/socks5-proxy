@@ -20,6 +20,15 @@ typedef struct hashmap_nodeCDT {
     sorted_hashmap_node previous;
 } hashmap_nodeCDT;
 
+typedef struct hashmap_list_CDT {
+    sorted_hashmap_list_node_t first;
+} hashmap_list_CDT;
+
+typedef struct hashmap_list_node_CDT {
+    void *element;
+    sorted_hashmap_list_node_t next;
+} hashmap_list_node_CDT;
+
 
 /** ----------------- DECLARATIONS ----------------- */
 /**
@@ -276,4 +285,81 @@ bool sorted_hashmap_set_freer(sorted_hashmap_t hashmap, void (freer)(void *e)) {
     if (hashmap == NULL || freer == NULL || hashmap->freer != NULL) return false;
     hashmap->freer = freer;
     return true;
+}
+
+/**
+ * Crea una lista con todos los nodos
+ */
+sorted_hashmap_list_t sorted_hashmap_get_values(sorted_hashmap_t hashmap) {
+    sorted_hashmap_list_t list = malloc(sizeof(*list));
+    if (list == NULL) return NULL;
+    if (hashmap->total_nodes == 0) {
+        list->first = NULL;
+        return list;
+    }
+
+    uint64_t i = 0;
+    sorted_hashmap_node hashmap_node;
+    sorted_hashmap_list_node_t list_node, previous_list_node = NULL;
+
+    while (i < hashmap->overflow_nodes_length) {
+        hashmap_node = hashmap->overflow_nodes[i];
+        if (hashmap_node != NULL) {
+            list_node = malloc(sizeof(*list_node));
+            if (list_node == NULL) {
+                sorted_hashmap_list_free(list);
+                return NULL;
+            }
+
+            list_node->next = previous_list_node;
+            list_node->element = hashmap_node->element;
+            previous_list_node = list_node;
+        }
+
+        i++;
+    }
+
+    return list;
+}
+
+/**
+ * Devuelve el primer elemento en la lista
+ * @param list
+ * @return
+ */
+sorted_hashmap_list_node_t sorted_hashmap_list_get_first(sorted_hashmap_list_t list) {
+    return list != NULL ? list->first : NULL;
+}
+
+/**
+ * Devuelve el siguiente nodo si es que existe, o NULL
+ * @param node
+ * @return
+ */
+sorted_hashmap_list_node_t sorted_hashmap_list_get_next_node(sorted_hashmap_list_node_t node) {
+    return node != NULL ? node->next : NULL;
+}
+
+/**
+ * Devuelve el elemento asociado
+ * @param node
+ * @return
+ */
+void *sorted_hashmap_list_get_element(sorted_hashmap_list_node_t node) {
+    return node != NULL ? node->element : NULL;
+}
+
+/**
+ * Elimina los recursos ocupados por una lista
+ * @param list
+ */
+void sorted_hashmap_list_free(sorted_hashmap_list_t list) {
+    if (list == NULL) return;
+
+    sorted_hashmap_list_node_t aux, node = list->first;
+    while (node != NULL) {
+        aux = node->next;
+        free(node);
+        node = aux;
+    }
 }

@@ -19,10 +19,16 @@ typedef enum errors{
 }error_t;
 
 struct http_credentials {
-    char * user;
-    char * password;
+    char * user; // either NULL or NULL terminated
+    char * password; // either NULL or NULL terminated
     error_t error;
+    uint8_t finished;
+    struct parser * parser;
+    size_t auth_current_length;
+    char * encoded_auth;
 };
+
+struct http_credentials * http_sniffer_init();
 
 /**
  * Se pasa como argumento el request HTTP completo para que sea parseado.
@@ -32,7 +38,10 @@ struct http_credentials {
  * 
  * Se debe hacer un free_http_credentials del puntero devuelto cuando no se use más.
  */
-struct http_credentials * http_sniffer(char * s);
+struct http_credentials * http_sniffer_consume(uint8_t * s, size_t length, struct http_credentials * http_credentials);
+
+void http_sniffer_destroy_parser(struct http_credentials * http_credentials);
+
 
 
 /**
