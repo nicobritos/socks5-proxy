@@ -30,6 +30,7 @@ typedef enum {
 
 typedef enum {
     IO_TIMEOUT = 1,
+    LMODE = 2,
 } var_code;
 
 

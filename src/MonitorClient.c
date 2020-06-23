@@ -21,6 +21,10 @@
 
 #include "monitor_parser/client/auth_server_response_parser.h"
 #include "monitor_parser/client/get_metrics_parser.h"
+#include "monitor_parser/client/get_access_log_parser.h"
+#include "monitor_parser/client/get_users_parser.h"
+#include "monitor_parser/client/get_vars_parser.h"
+#include "monitor_parser/client/get_passwords_parser.h"
 
 #include "MonitorClient.h"
 
@@ -51,8 +55,6 @@ static void login();
 
 static void start_connection(int argc, char *argv[]);
 
-static void check_command_line(int argc, char *argv[]);
-
 static void get_address_information();
 
 static void establish_connection();
@@ -63,7 +65,16 @@ static void get_menu_option();
 
 static void finish_connection();
 
-static uint16_t parse_port(const char *s);
+static void get_metrics(uint8_t *request,int length);
+
+static void get_users(uint8_t *request,int length);
+
+static void get_access_log(uint8_t *request,int length);
+
+static void get_passwords(uint8_t *request,int length);
+
+static void get_vars(uint8_t *request,int length);
+
 
 
 int main(int argc, char* argv[]){
@@ -115,8 +126,8 @@ static bool authenticate_user(const char *username, const char *password){
     const uint8_t datalen = 3 + ulen + plen;
 
     datagram[0] = ver;
-    strcpy(datagram+1,username);
-    strcpy(datagram+(1+ulen+1),password);
+    strcpy((char *)datagram+1,username);
+    strcpy((char *)datagram+(1+ulen+1),password);
 
     const int ANSWER_MAX_LENGTH = 255;
     uint8_t answer[ANSWER_MAX_LENGTH];
@@ -206,7 +217,7 @@ static void get_address_information(){
 
     int gai = getaddrinfo(address, port_str, &hints, &res);
     if(gai != 0){
-        fprintf("Host not found: %s\n", gai_strerror(rc));
+        printf("Host not found: %s\n", gai_strerror(rc));
         exit(EXIT_FAILURE);
     }
 }
@@ -254,16 +265,16 @@ static void get_command(const int code){
             get_metrics(answer,ret);
             break;
         case 0x02:
-            // get_users(answer,ret);
+            get_users(answer,ret);
             break;
         case 0x03:
-            // get_access_log(answer,ret);
+            get_access_log(answer,ret);
             break;
         case 0x04:
-            // get_passwords(answer,ret);
+            get_passwords(answer,ret);
             break;
         case 0x05:
-            // get_vars(answer,ret);
+            get_vars(answer,ret);
         default:
             break;
     }
@@ -281,17 +292,18 @@ static void get_metrics(uint8_t *response, int length){
     +----------+----------+----------+
     */
 
-    struct metrics * ans = get_metrics_parser(response, length);
-    if(ans->error != NO_ERROR){
-        printf("error\n");
-    } else {
-        printf("%u\n", ans->established_cons);
-        printf("%u\n", ans->actual_cons);
-        printf("%u\n", ans->bytes_transferred);
-    }
+    // struct metrics * ans = get_metrics_parser(response, length);
+    // if(ans->error != NO_ERROR){
+    //     printf("error\n");
+    // } else {
+    //     printf("%lu\n", ans->established_cons);
+    //     printf("%lu\n", ans->actual_cons);
+    //     printf("%lu\n", ans->bytes_transferred);
+    // }
+    // free_metrics(ans);
 }
 
-static void get_users(char *response, int length){
+static void get_users(uint8_t *response, int length){
 
     /* RESPONSE
     +------------+------------+
@@ -310,9 +322,10 @@ static void get_users(char *response, int length){
     //         printf("User: %s\tStatus: %d\n", ans->users[i].user, ans->users[i].status);
     //     }
     // }
+    // free_users(ans);
 }
 
-static void get_access_log(char *response, int length){
+static void get_access_log(uint8_t *response, int length){
 
     /* RESPONSE
     +----------+----------+-------+----------+----------+----------+----------+----------+
@@ -338,9 +351,10 @@ static void get_access_log(char *response, int length){
 //             printf("\tStatus: %u\n",ans->entries[i].user.status);
 //         }
 //     }
+//     free_access_log(ans);
 }
 
-static void get_passwords(char *response, int length){
+static void get_passwords(uint8_t *response, int length){
 
     /*
     +----------+----------+-------+----------+----------+----------+----------+----------+
@@ -366,9 +380,10 @@ static void get_passwords(char *response, int length){
 //             printf("\tPassword: %s\n",ans->entries[i].password);
 //         }
 //     }
+    // free_passwords(ans);
 }
 
-static void get_vars(char *response, int length){
+static void get_vars(uint8_t *response, int length){
 
     /*
     +-------+----------+
@@ -379,11 +394,12 @@ static void get_vars(char *response, int length){
     */
 
 //    struct vars * ans = get_vars_parser(response, length+1);
-//     if(ans->error != NO_ERROR){
-//         printf("error\n");
-//     } else {
-//         printf("IO Timeout = %u\n", ans->io_timeout);
-//     }
+    // if(ans->error != NO_ERROR){
+    //     printf("error\n");
+    // } else {
+    //     printf("IO Timeout = %lu\n", ans->io_timeout);
+    // }
+    // free_vars(ans);  
 }
 
 static void set_user(){
@@ -435,11 +451,11 @@ static void set_user(){
 
         const uint8_t ulen = (uint8_t) strlen(user);
         const uint8_t plen = (uint8_t) strlen(pass);
-        const uint8_t datalen = 3 + ulen + plen;
+        const uint8_t datalen = 4 + ulen + plen;
 
-        
-        strcpy(datagram,username);
-        strcpy(datagram+(1+ulen),password);
+        datagram[0] = 0x06;
+        strcpy((char *)datagram + 1,username);
+        strcpy((char *)datagram + (2+ulen),password);
         datagram[datalen-1] = ret;
 
         int ret;
@@ -449,6 +465,41 @@ static void set_user(){
             printf("Error sending request\n");
         }
     }
+}
+
+static void set_vars(){
+    printf("Log Severity: \n");
+    printf("[1] DEBUG\n");
+    printf("[2] INFO\n");
+    printf("[3] WARNING\n");
+    printf("[3] ERROR\n");
+
+
+    if(fgets(buffer,sizeof(buffer),stdin) == NULL){
+        fprintf(stderr,"Please, choose an option.\n");
+        return;
+    }
+
+    char *ptr;
+    long ret;
+
+    ret = strtoul(buffer,&ptr,10);
+
+    if(ret == 1 || ret ==21 || ret == 3 || ret == 4){
+         int DATAGRAM_MAX_LENGTH = (3);
+        uint8_t datagram [DATAGRAM_MAX_LENGTH];
+        datagram[0] = 0x07;
+        datagram[1] = 0x02;
+        datagram[2] = ret;
+        
+        int ret;
+        ret = sctp_sendmsg (sd, (void *)datagram, (size_t) DATAGRAM_MAX_LENGTH,NULL, 0, 0, 0, 0, 0, 0);
+
+        if(ret == -1){
+            printf("Error sending request\n");
+        }
+    }
+
 }
 
 static void get_menu_option(){
@@ -484,7 +535,7 @@ static void get_menu_option(){
             set_user();
             break;
         case 7:
-            // set_var();
+            set_vars();
         default:
             printf("Error: Invalid option: %lu \n Please try again with a valid option.",ret);
         break;

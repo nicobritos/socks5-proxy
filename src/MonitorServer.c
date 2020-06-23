@@ -23,6 +23,9 @@
 #include "socks5/sniffer/sniffed_credentials.h"
 #include "socks5/message/auth_user_pass_helper.h"
 #include "utils/log_helper.h"
+#include "socks5/socks5nio.h"
+#include "monitor_parser/server/command_request_parser.h"
+#include "monitor_parser/server/proxy_credentials_parser.h"
 
 #define MAX_BUFFER 1024
 #define MY_PORT_NUM 57611
@@ -40,18 +43,23 @@ int connSock;
 
 
 
-static bool authenticate_user(char *buffer){
-    uint8_t userRec[MAX_BUFFER];
-    uint8_t passRec[MAX_BUFFER];
+static bool authenticate_user(char *buffer, int length){
+    struct proxy_credentials * ans = proxy_credentials_parser(buffer, length);
+    free(buffer);
+    if(ans->error != 0){
+        printf("error\n");
+    } else {
+        printf("%u\n", ans->version);
+        printf("%s\n", ans->username);
+        printf("%s\n", ans->password);
+    }
 
-    strcpy(userRec,buffer+1);
-    strcpy(passRec,buffer+2+strlen(userRec));
-
-    if( strcmp(user,userRec) == 0){
-        if(strcmp(password,passRec) == 0){
+    if( strcmp(user,ans->username) == 0){
+        if(strcmp(password,ans->password) == 0){
             logged = true;
         }
     }
+    proxy_credentials_free(ans);
     return logged;
 }
 
@@ -141,10 +149,10 @@ static int receive_request(){
     return in;
 }
 
-static void sign_in(char *buffer){
+static void sign_in(char *buffer, int length){
     uint8_t response[MAX_BUFFER];
     char message[255];
-    bool userAuth = authenticate_user(buffer);
+    bool userAuth = authenticate_user(buffer,length);
     if(userAuth){
         printf("User:%s has signned in.\n",user);
         response[0] = 0x01;
@@ -156,7 +164,7 @@ static void sign_in(char *buffer){
         strcpy(message,"Username Or Password Incorrect");
     }
 
-    strcpy(response+1,message);    
+    strcpy((char *)response+1,message);    
 
     int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t)*(strlen(message)+2),NULL, 0, 0, 0, 0, 0, 0);
     if(ret == -1){
@@ -208,7 +216,7 @@ static void get_users(){
         sorted_hashmap_list_node_t node = sorted_hashmap_list_get_first(aup);
         while(node != NULL){
             struct auth_user_pass_credentials *credentials = sorted_hashmap_list_get_element(node);
-            strcpy(response+length,credentials->username);
+            strcpy((char *)response+length,credentials->username);
             length += (credentials->username_length + 1);
             response[length] = credentials->active;
             length += 1;
@@ -237,7 +245,40 @@ static void get_access_log(){
     +----------+----------+-------+----------+----------+----------+----------+----------+
     */
 
+    const int RESPONSE_MAX_LENGTH = 2048;
+    uint8_t response[RESPONSE_MAX_LENGTH];
 
+   socks_access_log_node_t log_node = socks_get_first_access_log_node();
+   int length = 0;
+   while(log_node != NULL){
+       struct socks_access_log_details_t  *details =  socks_get_access_log(log_node);
+       strcpy((char *)response+length,details->datetime);
+       length += (strlen(details->datetime) + 1);
+       strcpy((char *)response+length,details->username);
+       length += (strlen(details->username) + 1);
+       strcpy((char *)response+length, "A");
+       length += (strlen("A") + 1);
+       strcpy((char *)response,details->origin.ip);
+       length += (strlen(details->origin.ip) + 1);
+       strcpy((char *)response,details->origin.port);
+       length += (strlen(details->origin.port) + 1);
+       strcpy((char *)response, details->destination.name);
+       length += (strlen(details->destination.name) + 1);
+       strcpy((char *)response, details->destination.port);
+       length += (strlen(details->destination.port) + 1);
+       response[length] = details->status;
+       length += sizeof(details->status);
+       response[length] = '\0';
+       length += 1;
+       response[length] = '\0';
+       length += 1;
+   }
+   response[length] = '\0';
+
+   int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t)*RESPONSE_MAX_LENGTH,NULL, 0, 0, 0, 0, 0, 0);
+    if(ret == -1){
+        printf("Error sending message\n");
+    }
 }
 
 static void get_passwords(){
@@ -261,23 +302,24 @@ static void get_passwords(){
         while(node != NULL){
             struct sniffed_credentials * credential = sniffed_credentials_get(node);
 
-            strcpy(response+length,credential->datetime);
+            strcpy((char *)response+length,credential->datetime);
             length += (strlen(credential->datetime)+1);
-            strcpy(response+length,credential->username); 
+            strcpy((char *)response+length,credential->username); 
             length += (strlen(credential->username)+1);
-            strcpy(response+length,"P"); 
+            strcpy((char *)response+length,"P"); 
             length += (strlen("P")+1);
-            strcpy(response+length,credential->protocol); 
+            strcpy((char *)response+length,credential->protocol); 
             length += (strlen(credential->protocol)+1);
-            strcpy(response+length,credential->destination); 
+            strcpy((char *)response+length,credential->destination); 
             length += (strlen(credential->destination)+1);
-            strcpy(response+length,credential->port); 
+            strcpy((char *)response+length,credential->port); 
             length += (strlen(credential->port)+1);
-            strcpy(response+length,credential->logger_user); 
+            strcpy((char *)response+length,credential->logger_user); 
             length += (strlen(credential->logger_user)+1);
-            strcpy(response+length,credential->password); 
+            strcpy((char *)response+length,credential->password); 
             length += (strlen(credential->password)+1);
             response[length] = '\0';
+            length += 1;
 
             node = sniffed_credentials_get_next(node);
         }
@@ -320,45 +362,121 @@ static void get_vars(){
 
 }
 
-static void parse_command(char *buffer){
-    uint8_t code = buffer[0];
-    switch(code){
-        case 0x01:
-            get_metrics();
-            break;
-        case 0x02:
-            printf("GET_USERS\n");
-            get_users();
-            break;
-        case 0x03:
-            printf("GET_ACCESS_LOG\n");
-            get_access_log();
-            break;
-        case 0x04:
-            printf("GET_PASSWORDS\n");
-            get_passwords();
-            break;
-        case 0x05:
-            printf("GET_VARS\n");
-            get_vars();
-            break;
-        case 0x06:
-            printf("SET_USER\n");
-            // set_user();
-            break;
-        case 0x07:
-            printf("SET_VAR\n");
-            // set_var();
-            break;
-        default:
-            break;
+static void set_user(char *username, char *password, user_mode mode){
+    enum auth_user_pass_helper_status status;
+    if(mode == REMOVE_USER){
+        status = auth_user_pass_helper_remove(username);
+        if(status != auth_user_pass_helper_status_ok ){
+            printf("Error trying to  delete user. Status code: %d\n",status);
+            return;
+        }
     }
+    else{
+        status = auth_user_pass_helper_set_enable(username,mode);
+        if((status == auth_user_pass_helper_status_error_user_not_found) && mode == ENABLE_USER ){
+            struct auth_user_pass_credentials *credentials = malloc(sizeof(*credentials));
+            if(credentials != NULL){
+                uint8_t length = strlen(username);
+                credentials->username = malloc(sizeof(*credentials->username) * length + 1);
+    
+                if(credentials->username == NULL) {
+                    free(credentials);
+                    return;
+                }
+
+                 memcpy(credentials->username,username,length + 1);
+
+                credentials->username_length = length;
+
+                length = strlen(password);
+                credentials->password = malloc(sizeof(*credentials->password) * length +1);
+
+                if(credentials->password == NULL){
+                    free(credentials->username);
+                    free(credentials);
+                }
+
+                memcpy(credentials->password,password,length + 1);
+                credentials->active = mode;
+
+                status = auth_user_pass_helper_add(credentials);
+                if(status != auth_user_pass_helper_status_ok){
+                    printf("Error trying to add new user. Status code: %d\n",status);
+                    return;
+                }
+            }
+        }
+        if(status != auth_user_pass_helper_status_ok){
+            printf("Error trying to enable/disable user. Status code: %d\n",status);
+            return;
+        }
+    }
+    printf("Set_user():Finished with no errors\n");
+}
+
+static void set_vars(var_code var, uint8_t * var_value){
+    if(var == LMODE){
+        log_t log = logger_get_system_log();
+        if(log != NULL){
+            logger_set_log_severity(log,(char)var_value);
+        }
+    }
+}
+    
+
+static void parse_command(char *buffer, int length){
+    if(strlen(buffer) == 1){
+        uint8_t code = buffer[0];
+
+        switch(code){
+            case 0x01:
+                get_metrics();
+                break;
+            case 0x02:
+                printf("GET_USERS\n");
+                get_users();
+                break;
+            case 0x03:
+                printf("GET_ACCESS_LOG\n");
+                get_access_log();
+                break;
+            case 0x04:
+                printf("GET_PASSWORDS\n");
+                get_passwords();
+                break;
+            case 0x05:
+                printf("GET_VARS\n");
+                get_vars();
+                break;
+            default:
+                break;
+        }
+    }
+    else{
+        struct command * ans = command_request_parser(buffer, length);
+        if(ans->error != NO_ERROR){
+            printf("error\n");
+        } else {
+            if(ans->code == SET_USER){
+                set_user(ans->user,ans->password,ans->mode);
+                printf("User = %s\n", ans->user);
+                printf("Password = %s\n", ans->password);
+                printf("Mode = %u\n", ans->mode);
+            } else if(ans->code == SET_VAR){
+                set_vars(ans->var,ans->var_value);
+                printf("Var Code = %u\n", ans->var);
+                for(int i = 0; i<ans->var_value_length; i++){
+                    printf("Var Value - Byte %d = %02x\n", i, ans->var_value[i]);
+                }
+            }
+        }
+        free_command(ans);
+    }
+    
 }
 
 
 int main(int argc, char* argv[]){
-
-
 
     parse_args(argc,argv,&args);
     server_init();
@@ -368,10 +486,10 @@ int main(int argc, char* argv[]){
         int ret = receive_request();
         if(ret > 0){
             if(!logged){
-                sign_in(buffer);
+                sign_in(buffer,ret);
             }
             else{
-                parse_command(buffer);
+                parse_command(buffer,ret);
             }
         }
         else{
