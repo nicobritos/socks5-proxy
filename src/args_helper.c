@@ -53,6 +53,7 @@ user(char *s) {
         credentials.username = s;
         credentials.username_length = p - s;
         credentials.password = p;
+        credentials.active = true;
         auth_user_pass_helper_add(&credentials);
     }
 }
