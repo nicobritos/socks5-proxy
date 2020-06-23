@@ -191,7 +191,45 @@ static void get_metrics(){
 }
 
 static void get_users(){
-    
+
+    /* RESPONSE
+    +------------+------------+
+    |    USER    |   STATUS   | 
+    +------------+------------+
+    |  Variable  |     1      |  
+    +------------+------------+
+    */
+
+    const int RESPONSE_MAX_LENGTH = 255;
+    uint8_t response[RESPONSE_MAX_LENGTH];
+
+}
+
+static void get_access_log(){
+
+    /* RESPONSE
+    +----------+----------+-------+----------+----------+----------+----------+----------+
+    |   TIME   |   USER   | RTYPE |   OIP    |  OPORT   |   DEST   |  DPORT   |  STATUS  |
+    +----------+----------+-------+----------+----------+----------+----------+----------+
+    | Variable | Variable |   1   | Variable | Variable | Variable | Variable |    1     |
+    +----------+----------+-------+----------+----------+----------+----------+----------+
+    */
+}
+
+static void get_passwords(){
+
+    /* RESPONSE
+    +----------+----------+-------+----------+----------+----------+----------+----------+
+    |   TIME   |   USER   | RTYPE | PROTOCOL |   DEST   |  DPORT   |   ULOG   | PASSWORD |
+    +----------+----------+-------+----------+----------+----------+----------+----------+
+    | Variable | Variable |   1   | Variable | Variable | Variable | Variable | Variable |
+    +----------+----------+-------+----------+----------+----------+----------+----------+
+    */
+
+   sniffed_credentials_list = socks_get_sniffed_credentials_list();
+   
+
+
 }
 
 static void parse_command(char *buffer){
@@ -206,11 +244,11 @@ static void parse_command(char *buffer){
             break;
         case 0x03:
             printf("GET_ACCESS_LOG\n");
-            // get_acces_log();
+            get_access_log();
             break;
         case 0x04:
             printf("GET_PASSWORDS\n");
-            // get_passwords();
+            get_passwords();
             break;
         case 0x05:
             printf("GET_VARS\n");
@@ -223,6 +261,8 @@ static void parse_command(char *buffer){
 
 
 int main(int argc, char* argv[]){
+
+
 
     parse_args(argc,argv,&args);
     server_init();
