@@ -1130,8 +1130,8 @@ bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, siz
                 doh_response->_doh_parser->reading_data = true;
                 break;
             case SET_DATA_LENGTH:
-                doh_response->_doh_parser->data_length *= 8;
-                doh_response->_doh_parser->data_length += ret->data[0];
+                doh_response->_doh_parser->data_length <<= 8u;
+                doh_response->_doh_parser->data_length |= ret->data[0];
                 break;
             case INVALID_INPUT_FORMAT_T:
                 parser_destroy(doh_response->_doh_parser->parser);
