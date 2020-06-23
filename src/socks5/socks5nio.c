@@ -504,7 +504,17 @@ void socks_pool_destroy() {
     }
 
     if (sniffed_credentials_l != NULL) {
-        // TODO: free de todos los credentials
+        sniffed_credentials_node node = sniffed_credentials_get_first(sniffed_credentials_l);
+
+        while (node != NULL) {
+            struct sniffed_credentials *credentials = sniffed_credentials_get(node);
+            free(credentials->username);
+            free(credentials->password);
+            free(credentials->logger_user);
+            free(credentials->datetime);
+            node = sniffed_credentials_get_next(node);
+        }
+
         sniffed_credentials_destroy(sniffed_credentials_l);
     }
 }
@@ -1685,7 +1695,7 @@ static unsigned copy_read(struct selector_key *key) {
                             snprintf(credentials->port, PORT_DIGITS + 1, "%d", ((struct sockaddr_in6*)&s->client_addr)->sin6_port);
                         }
 
-                        credentials->protocol = HTTP_PROTOCOL;
+                        credentials->protocol = POP3_PROTOCOL;
 
                         sniffed_credentials_add(sniffed_credentials_l, credentials);
                     }
