@@ -5,6 +5,27 @@
 #include "../utils/log_helper.h"
 #include "sniffer/sniffed_credentials.h"
 
+#define PORT_DIGITS 5
+
+struct socks_access_log_details_t {
+    char *datetime;
+    char *username;
+
+    struct {
+        char ip[INET6_ADDRSTRLEN];
+        char port[PORT_DIGITS + 1];
+    } origin;
+
+    struct {
+        char *name;
+        char port[PORT_DIGITS + 1];
+    } destination;
+
+    uint8_t status;
+};
+
+typedef struct socks_access_log_node_CDT *socks_access_log_node_t;
+
 void socks_init();
 
 /**
@@ -12,6 +33,26 @@ void socks_init();
  * @return
  */
 log_t socks_get_log();
+
+/**
+ * Devuelve el primer nodo del access log
+ * @return
+ */
+socks_access_log_node_t socks_get_first_access_log_node();
+
+/**
+ * Devuelve el siguiente nodo del access log
+ * @param node
+ * @return
+ */
+socks_access_log_node_t socks_get_next_access_log_node(socks_access_log_node_t node);
+
+/**
+ * Devuelve el access log asociado al nodo
+ * @param node
+ * @return
+ */
+struct socks_access_log_details_t *socks_get_access_log(socks_access_log_node_t node);
 
 /**
  * Devuelve la cantidad total de clientes que se conectaron

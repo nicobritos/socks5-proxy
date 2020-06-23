@@ -289,6 +289,16 @@ struct socks5 {
     struct socks5 *next;
 };
 
+typedef struct socks_access_log_t {
+    socks_access_log_node_t first;
+    socks_access_log_node_t last;
+} socks_access_log_t;
+
+typedef struct socks_access_log_node_CDT {
+    struct socks_access_log_details_t details;
+    socks_access_log_node_t next;
+} socks_access_log_node_CDT;
+
 /**
  * Pool de struct socks5
  *
@@ -300,6 +310,7 @@ static struct socks5 *pool = NULL;
 static log_t logger;
 static uint64_t max_clients, current_clients, bytes_transferred;
 static sniffed_credentials_list sniffed_credentials_l;
+static socks_access_log_t access_log;
 
 /** -------------------- DECLARATIONS --------------------- */
 /** ---------------- SOCKSV5 ---------------- */
@@ -358,6 +369,7 @@ static unsigned request_process(struct selector_key *key, struct request_st *d);
 static unsigned request_connect(struct selector_key *key, struct request_st *d);
 static unsigned request_write(struct selector_key *key);
 static void request_write_close(unsigned state, struct selector_key *key);
+/** Este metodo tambien logguea al access log */
 static void log_request(const struct selector_key *key, const struct request_parser *p, enum socks_response_status socks_status);
 
 /** ---------------- REQUEST RESOLVE ---------------- */
@@ -447,6 +459,34 @@ void socks_init() {
                 "No se pudo crear el listado para almacenar las contrasenas sniffeadas",
                 0);
     }
+
+    access_log.first = access_log.last = NULL;
+}
+
+/**
+ * Devuelve el primer nodo del access log
+ * @return
+ */
+socks_access_log_node_t socks_get_first_access_log_node() {
+    return access_log.first;
+}
+
+/**
+ * Devuelve el siguiente nodo del access log
+ * @param node
+ * @return
+ */
+socks_access_log_node_t socks_get_next_access_log_node(socks_access_log_node_t node) {
+    return node != NULL ? node->next : NULL;
+}
+
+/**
+ * Devuelve el access log asociado al nodo
+ * @param node
+ * @return
+ */
+struct socks_access_log_details_t *socks_get_access_log(socks_access_log_node_t node) {
+    return node != NULL ? &node->details : NULL;
 }
 
 /**
@@ -516,7 +556,19 @@ void socks_pool_destroy() {
         }
 
         sniffed_credentials_destroy(sniffed_credentials_l);
+        sniffed_credentials_l = NULL;
     }
+
+    socks_access_log_node_t aux_node, node = access_log.first;
+    while (node != NULL) {
+        aux_node = node->next;
+        free(node->details.username);
+        free(node->details.datetime);
+        free(node->details.destination.name);
+        free(node);
+        node = aux_node;
+    }
+    access_log.first = access_log.last = NULL;
 }
 
 /** Intenta aceptar la nueva conexión entrante*/
@@ -1171,11 +1223,78 @@ static void request_write_close(unsigned state, struct selector_key *key) {
 static void log_request(const struct selector_key *key, const struct request_parser *p, enum socks_response_status socks_status) {
     const struct socks5 *s = ATTACHMENT(key);
 
+    socks_access_log_node_t node = malloc(sizeof(*node));
+    if (node == NULL) {
+        goto file_log;
+    }
+    node->next = NULL;
+    node->details.datetime = logger_get_datetime();
+    if (node->details.datetime == NULL) {
+        free(node);
+        goto file_log;
+    }
+
+    uint16_t port_client;
+    uint16_t port_server;
+    if (!extract_ip_port_(&s->client_addr, node->details.origin.ip, &port_client)) {
+        free(node->details.datetime);
+        free(node);
+        goto file_log;
+    }
+    if (s->client_request.request.address_type == REQUEST_ATYP_DOMAIN_NAME) {
+        // Necesitamos copiar el domain name
+        uint16_t len = strlen(s->client_request.request.domain_name);
+        node->details.destination.name = malloc(sizeof(*node->details.destination.name) * (len + 1));
+        if (node->details.destination.name == NULL) {
+            free(node->details.datetime);
+            free(node);
+            goto file_log;
+        }
+        memcpy(node->details.destination.name, s->client_request.request.domain_name, len + 1);
+    } else {
+        // Necesitamos extraer la ip
+        node->details.destination.name = malloc(sizeof(*node->details.destination.name) * INET6_ADDRSTRLEN);
+        if (node->details.destination.name == NULL) {
+            free(node->details.datetime);
+            free(node);
+            goto file_log;
+        }
+        if (!extract_ip_port_(&s->server_addr, node->details.destination.name, &port_server)) {
+            free(node->details.datetime);
+            free(node->details.destination.name);
+            free(node);
+            goto file_log;
+        }
+    }
+
+    node->details.username = malloc(sizeof(*node->details.username) * (s->credentials.username_length + 1));
+    if (node->details.username == NULL) {
+        free(node->details.datetime);
+        free(node->details.destination.name);
+        free(node);
+        goto file_log;
+    }
+    memcpy(node->details.username, s->credentials.username, s->credentials.username_length + 1);
+
+    port_server = s->client_request.request.port;
+
+    snprintf(node->details.origin.port, PORT_DIGITS, "%d", port_client);
+    snprintf(node->details.destination.port, PORT_DIGITS, "%d", port_server);
+    node->details.origin.port[PORT_DIGITS] = node->details.destination.port[PORT_DIGITS] = '\0';
+
+    node->details.status = socks_status;
+
+    if (access_log.first == NULL) {
+        access_log.first = access_log.last = node;
+    } else {
+        access_log.last->next = node;
+        access_log.last = node;
+    }
+
+    file_log:
     if (logger != NULL) {
         char ip_buffer_client[INET6_ADDRSTRLEN];
         char ip_buffer_server[INET6_ADDRSTRLEN];
-        uint16_t port_client;
-        uint16_t port_server;
         if (!extract_ip_port_(&s->client_addr, ip_buffer_client, &port_client)
             || !extract_ip_port_(&s->server_addr, ip_buffer_server, &port_server)) {
             return;
@@ -1200,7 +1319,7 @@ static void log_request(const struct selector_key *key, const struct request_par
                         s->client_request.request.domain_name,
                         ip_buffer_server,
                         s->client_request.request.port,
-                        errored ? port_server : -1,
+                        errored ? -1 : port_server,
                         socks_status_str
                 );
             } else {
@@ -1215,7 +1334,7 @@ static void log_request(const struct selector_key *key, const struct request_par
                         connected_str,
                         ip_buffer_server,
                         s->client_request.request.port,
-                        errored ? port_server : -1,
+                        errored ? -1 : port_server,
                         socks_status_str
                 );
             }
@@ -1232,7 +1351,7 @@ static void log_request(const struct selector_key *key, const struct request_par
                         s->client_request.request.domain_name,
                         ip_buffer_server,
                         s->client_request.request.port,
-                        errored ? port_server : -1,
+                        errored ? -1 : port_server,
                         socks_status_str
                 );
             } else {
@@ -1246,7 +1365,7 @@ static void log_request(const struct selector_key *key, const struct request_par
                         connected_str,
                         ip_buffer_server,
                         s->client_request.request.port,
-                        errored ? port_server : -1,
+                        errored ? -1 : port_server,
                         socks_status_str
                 );
             }
@@ -1634,10 +1753,11 @@ static unsigned copy_read(struct selector_key *key) {
                     extract_ip_port_(&s->client_addr, credentials->destination, &p);
 
                     if (s->client_addr.ss_family == AF_INET) {
-                        snprintf(credentials->port, PORT_DIGITS + 1, "%d", ((struct sockaddr_in*)&s->client_addr)->sin_port);
+                        snprintf(credentials->port, PORT_DIGITS, "%d", ((struct sockaddr_in*)&s->client_addr)->sin_port);
                     } else {
-                        snprintf(credentials->port, PORT_DIGITS + 1, "%d", ((struct sockaddr_in6*)&s->client_addr)->sin6_port);
+                        snprintf(credentials->port, PORT_DIGITS, "%d", ((struct sockaddr_in6*)&s->client_addr)->sin6_port);
                     }
+                    credentials->port[PORT_DIGITS] = '\0';
 
                     credentials->protocol = HTTP_PROTOCOL;
 
@@ -1690,10 +1810,11 @@ static unsigned copy_read(struct selector_key *key) {
                         extract_ip_port_(&s->client_addr, credentials->destination, &p);
 
                         if (s->client_addr.ss_family == AF_INET) {
-                            snprintf(credentials->port, PORT_DIGITS + 1, "%d", ((struct sockaddr_in*)&s->client_addr)->sin_port);
+                            snprintf(credentials->port, PORT_DIGITS, "%d", ((struct sockaddr_in*)&s->client_addr)->sin_port);
                         } else {
-                            snprintf(credentials->port, PORT_DIGITS + 1, "%d", ((struct sockaddr_in6*)&s->client_addr)->sin6_port);
+                            snprintf(credentials->port, PORT_DIGITS, "%d", ((struct sockaddr_in6*)&s->client_addr)->sin6_port);
                         }
+                        credentials->port[PORT_DIGITS] = '\0';
 
                         credentials->protocol = POP3_PROTOCOL;
 

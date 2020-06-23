@@ -53,7 +53,8 @@ enum auth_user_pass_helper_status auth_user_pass_helper_init() {
     struct auth_user_pass_credentials default_user = {
             .username = AUTH_USER_PASS_DEFAULT_USER,
             .username_length = AUTH_USER_PASS_DEFAULT_USER_LENGTH,
-            .password = AUTH_USER_PASS_DEFAULT_PASS
+            .password = AUTH_USER_PASS_DEFAULT_PASS,
+            .active = true
     };
 
     struct auth_user_pass_credentials *user = duplicate_credentials(&default_user);
@@ -148,7 +149,7 @@ bool auth_user_pass_helper_verify(const struct auth_user_pass_credentials *crede
     sorted_hashmap_node node = sorted_hashmap_find(credentials_map, (void*) credentials);
     if (node == NULL) return false;
     const struct auth_user_pass_credentials *other_credentials = sorted_hashmap_get_element(node);
-    return strcmp(credentials->password, other_credentials->password) == 0;
+    return other_credentials->active && strcmp(credentials->password, other_credentials->password) == 0;
 }
 
 /**
@@ -189,6 +190,8 @@ static struct auth_user_pass_credentials *duplicate_credentials(const struct aut
         return NULL;
     }
     memcpy(copy->password, credentials->password, password_length + 1);
+
+    copy->active = credentials->active;
 
     return copy;
 }
