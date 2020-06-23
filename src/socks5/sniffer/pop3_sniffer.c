@@ -7,10 +7,10 @@
 #define CHUNK_SIZE 10
 
 /* Funciones auxiliares */
-struct pop3_credentials * add_char_to_user(struct pop3_credentials * ans, char c);
-struct pop3_credentials * add_char_to_password(struct pop3_credentials * ans, char c);
-void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length);
-struct pop3_credentials * error(struct pop3_credentials * ans, error_t error_type);
+static struct pop3_credentials * add_char_to_user(struct pop3_credentials * ans, char c);
+static struct pop3_credentials * add_char_to_password(struct pop3_credentials * ans, char c);
+static void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length);
+static struct pop3_credentials * error(struct pop3_credentials * ans, pop3_sniffer_error_t error_type);
 
 // definición de maquina
 
@@ -354,14 +354,14 @@ void pop3_sniffer_destroy(struct parser * parser){
     parser_destroy(parser);
 }
 
-struct pop3_credentials * pop3_credentials_init(){
-    struct pop3_credentials * ans = calloc(1, sizeof(*ans));
-    return ans;
+void pop3_credentials_init(struct pop3_credentials * credentials){
+    if (credentials == NULL) return;
+    credentials->finished = 0;
 }
 
-struct pop3_credentials * pop3_sniffer_consume(struct parser * parser, struct pop3_credentials * pop3_credentials, char * s){
-    for(int i = 0; s[i] && !(pop3_credentials->finished); i++){
-        struct parser_event * ret = parser_feed(parser, s[i]);
+struct pop3_credentials * pop3_sniffer_consume(struct parser * parser, struct pop3_credentials * pop3_credentials, uint8_t *s, size_t max_len){
+    for(size_t i = 0; s[i] && !(pop3_credentials->finished) && i < max_len; i++){
+        const struct parser_event * ret = parser_feed(parser, s[i]);
         switch (ret->type)
         {
             case COPY_USER:
@@ -371,7 +371,7 @@ struct pop3_credentials * pop3_sniffer_consume(struct parser * parser, struct po
                 add_char_to_user(pop3_credentials, '\0');
                 pop3_credentials->user = realloc(pop3_credentials->user, sizeof(*(pop3_credentials->user)) * pop3_credentials->user_length);
                 if(pop3_credentials->user == NULL){
-                    return error(pop3_credentials, REALLOC_ERROR);
+                    return error(pop3_credentials, POP3_SNIFFER_REALLOC_ERROR);
                 }
                 (pop3_credentials->user_length)--;
                 break;
@@ -389,7 +389,7 @@ struct pop3_credentials * pop3_sniffer_consume(struct parser * parser, struct po
                 add_char_to_password(pop3_credentials, '\0');
                 pop3_credentials->password = realloc(pop3_credentials->password, sizeof(*(pop3_credentials->password)) * pop3_credentials->password_length);
                 if(pop3_credentials->password == NULL){
-                    return error(pop3_credentials, REALLOC_ERROR);
+                    return error(pop3_credentials, POP3_SNIFFER_REALLOC_ERROR);
                 }
                 (pop3_credentials->password_length)--;
                 break;
@@ -421,36 +421,35 @@ void free_pop3_credentials(struct pop3_credentials * pop3_credentials){
         if(pop3_credentials->password != NULL){
             free(pop3_credentials->password);
         }
-        free(pop3_credentials);
     }
 }
 
-struct pop3_credentials * add_char_to_user(struct pop3_credentials * ans, char c){
+static struct pop3_credentials * add_char_to_user(struct pop3_credentials * ans, char c){
     ans->user = resize_if_needed(ans->user, sizeof(*(ans->user)), ans->user_length);
     if(ans->user == NULL){
-        return error(ans, REALLOC_ERROR);
+        return error(ans, POP3_SNIFFER_REALLOC_ERROR);
     }
     ans->user[(ans->user_length)++] = c;
     return ans;
 }
 
-struct pop3_credentials * add_char_to_password(struct pop3_credentials * ans, char c){
+static struct pop3_credentials * add_char_to_password(struct pop3_credentials * ans, char c){
     ans->password = resize_if_needed(ans->password, sizeof(*(ans->password)), ans->password_length);
     if(ans->password == NULL){
-        return error(ans, REALLOC_ERROR);
+        return error(ans, POP3_SNIFFER_REALLOC_ERROR);
     }
     ans->password[(ans->password_length)++] = c;
     return ans;
 }
 
-struct pop3_credentials * error(struct pop3_credentials * ans, error_t error_type){
+static struct pop3_credentials * error(struct pop3_credentials * ans, pop3_sniffer_error_t error_type){
     free_pop3_credentials(ans);
     ans = calloc(1,sizeof(*ans));
     ans->error = error_type;
     return ans;
 }
 
-void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length){
+static void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length){
     if(current_length % CHUNK_SIZE == 0){
         return realloc(ptr, ptr_size * (current_length + CHUNK_SIZE));
     }

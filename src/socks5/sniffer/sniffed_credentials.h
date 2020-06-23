@@ -1,12 +1,16 @@
 #ifndef PC_2020A_6_TPE_SOCKSV5_SNIFFED_CREDENTIALS_H
 #define PC_2020A_6_TPE_SOCKSV5_SNIFFED_CREDENTIALS_H
 
+#include <arpa/inet.h>
+
+#define PORT_DIGITS 5
+
 struct sniffed_credentials {
     char *datetime;
     char *username;
     const char *protocol;
-    char *destination;
-    char *port;
+    char destination[INET6_ADDRSTRLEN];
+    char port[PORT_DIGITS + 1];
     char *logger_user;
     char *password;
 };

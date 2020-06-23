@@ -139,22 +139,23 @@ void logger_append_to_log(log_t log, enum log_severity severity, const char *s, 
     va_end(args);
 
     /** Formateamos el string final con el datetime y el severity */
-    time_t timer;
-    char buffer[26];
-    struct tm* tm_info;
-    timer = time(NULL);
-    tm_info = localtime(&timer);
-    strftime(buffer, 26, "%Y-%m-%dT%H:%M:%S%z", tm_info);
-
-    /** Calculamos el espacio que necesitamos para el string final */
-    n = snprintf(NULL, 0, "[%s] [%s] %s\n", buffer, get_severity_str_(severity), out);
-    char *out2 = malloc(sizeof(*out2) * (n + 1));
-    if (out2 == NULL) {
+    char *datetime = logger_get_datetime();
+    if (datetime == NULL) {
         free(out);
         return;
     }
-    sprintf(out2, "[%s] [%s] %s\n", buffer, get_severity_str_(severity), out);
+
+    /** Calculamos el espacio que necesitamos para el string final */
+    n = snprintf(NULL, 0, "[%s] [%s] %s\n", datetime, get_severity_str_(severity), out);
+    char *out2 = malloc(sizeof(*out2) * (n + 1));
+    if (out2 == NULL) {
+        free(datetime);
+        free(out);
+        return;
+    }
+    sprintf(out2, "[%s] [%s] %s\n", datetime, get_severity_str_(severity), out);
     free(out); // No lo vamos a usar
+    free(datetime);
 
     append_to_log_s(log, out2);
 
@@ -180,6 +181,24 @@ void logger_close_system_log() {
     if (system_log == NULL) return;
     logger_close_log(system_log);
     system_log = NULL;
+}
+
+/**
+ * Retorna la representacion del current datetime
+ * en un string con formato ISO 8601. El mismo debe
+ * luego ser liberado
+ */
+char *logger_get_datetime() {
+    time_t timer;
+    char *r = calloc(26, sizeof(*r));
+    if (r == NULL) return NULL;
+
+    struct tm* tm_info;
+    timer = time(NULL);
+    tm_info = localtime(&timer);
+    strftime(r, 26, "%Y-%m-%dT%H:%M:%S%z", tm_info);
+
+    return r;
 }
 
 /** ------------- PRIVATE ------------- */

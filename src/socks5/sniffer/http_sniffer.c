@@ -8,12 +8,12 @@
 #define CHUNK_SIZE 10
 
 /* Funciones auxiliares */
-void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length);
-char * add_char(char ** ans, char c, size_t * current_length);
-struct http_credentials * error(struct http_credentials * ans, error_t error_type);
-char * decodeBase64(const char * encoded, error_t * error_code);
-char base64table(const char c);
-error_t parseUserPass(struct http_credentials * ans, char * s);
+static void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length);
+static char * add_char(char ** ans, char c, size_t * current_length);
+static void error(struct http_credentials * ans, http_sniffer_error_t error_type);
+static char * decodeBase64(const char * encoded, http_sniffer_error_t * error_code);
+static char base64table(const char c);
+static http_sniffer_error_t parseUserPass(struct http_credentials * ans, char * s);
 
 // definición de maquina
 
@@ -292,70 +292,68 @@ static struct parser_definition definition = {
     .start_state  = ST_START,
 };
 
-struct http_credentials * http_sniffer_init(){
-    struct http_credentials * ans = calloc(1, sizeof(*ans));
-    ans->parser = parser_init(parser_no_classes(), &definition);
-    return ans;
+void http_sniffer_init(struct http_credentials *credentials){
+    if (credentials == NULL) return;
+    credentials->parser = parser_init(parser_no_classes(), &definition);
 }
 
-struct http_credentials * http_sniffer_consume(uint8_t * s, size_t length, struct http_credentials * ans){
-    for(int i = 0; !ans->finished && i<length; i++){
+void http_sniffer_consume(uint8_t * s, size_t length, struct http_credentials * ans){
+    for(size_t i = 0; !ans->finished && i < length; i++){
         const struct parser_event* ret = parser_feed(ans->parser, s[i]);
         switch (ret->type){
             case COPY_ENCODED_AUTH:
                 add_char(&(ans->encoded_auth), ret->data[0], &(ans->auth_current_length));
                 if(ans->encoded_auth == NULL){
-                    return error(ans, REALLOC_ERROR);
+                    error(ans, HTTP_SNIFFER_REALLOC_ERROR);
                 }
             break;
             case COPY_ENCODED_AUTH_R:
                 add_char(&(ans->encoded_auth), '\r', &(ans->auth_current_length));
                 if(ans->encoded_auth == NULL){
-                    return error(ans, REALLOC_ERROR);
+                    error(ans, HTTP_SNIFFER_REALLOC_ERROR);
                 }
                 add_char(&(ans->encoded_auth), ret->data[0], &(ans->auth_current_length));
                 if(ans->encoded_auth == NULL){
-                    return error(ans, REALLOC_ERROR);
+                    error(ans, HTTP_SNIFFER_REALLOC_ERROR);
                 }
             break;
             case END_ENCODED_AUTH:
                 add_char(&(ans->encoded_auth), '\0', &(ans->auth_current_length));
                 if(ans->encoded_auth == NULL){
-                    return error(ans, REALLOC_ERROR);
+                    error(ans, HTTP_SNIFFER_REALLOC_ERROR);
                 }
                 ans->encoded_auth = realloc(ans->encoded_auth, sizeof(*ans->encoded_auth) * (ans->auth_current_length));
                 if(ans->encoded_auth == NULL){
-                    return error(ans, REALLOC_ERROR);
+                    error(ans, HTTP_SNIFFER_REALLOC_ERROR);
                 }
                 ans->finished = 1;
             break;
             case INVALID_INPUT_FORMAT_T:
-                return error(ans, INVALID_INPUT_FORMAT_ERROR);
+                error(ans, HTTP_SNIFFER_INVALID_INPUT_FORMAT_ERROR);
             break;
         }
     }
     if(ans->finished){
         (ans->auth_current_length)--;
         if(ans->encoded_auth == NULL || (((ans->auth_current_length % 4)) != 0)){
-            return error(ans, INVALID_INPUT_FORMAT_ERROR);
+            error(ans, HTTP_SNIFFER_INVALID_INPUT_FORMAT_ERROR);
         }
-        error_t error_code = NO_ERROR;
+        http_sniffer_error_t error_code = HTTP_SNIFFER_NO_ERROR;
         char * temp = decodeBase64(ans->encoded_auth, &error_code);
         free(ans->encoded_auth);
         ans->encoded_auth = NULL;
-        if(error_code != NO_ERROR){
-            return error(ans, error_code);
+        if(error_code != HTTP_SNIFFER_NO_ERROR){
+            error(ans, error_code);
         }
         if(temp == NULL){
-            return error(ans, INVALID_INPUT_FORMAT_ERROR);
+            error(ans, HTTP_SNIFFER_INVALID_INPUT_FORMAT_ERROR);
         }
         error_code = parseUserPass(ans, temp);
         free(temp);
-        if(error_code != NO_ERROR){
-            return error(ans, error_code);
+        if(error_code != HTTP_SNIFFER_NO_ERROR){
+            error(ans, error_code);
         }
     }
-    return ans;
 }
 
 void free_http_credentials(struct http_credentials * ans){
@@ -372,21 +370,20 @@ void free_http_credentials(struct http_credentials * ans){
         if(ans->parser != NULL){
             parser_destroy(ans->parser);
         }
-        free(ans);
     }
 }
 
-char * decodeBase64(const char * encoded, error_t * error_code){ // Algoritmo copiado del pseudocodigo del paper subido por Juan en el foro
+static char * decodeBase64(const char * encoded, http_sniffer_error_t * error_code){ // Algoritmo copiado del pseudocodigo del paper subido por Juan en el foro
     char * aux = NULL;
     size_t encoded_length = strlen(encoded);
     size_t length = 0;
-    for(int i = 0; i < encoded_length; i+=4){
+    for(size_t i = 0; i < encoded_length; i+=4){
         char a = base64table(encoded[i]);
         char b = base64table(encoded[i+1]);
         char c = base64table(encoded[i+2]);
         char d = base64table(encoded[i+3]);
         if(a<0 || b<0 || c<0 || d<0){
-            *error_code = INVALID_INPUT_FORMAT_ERROR;
+            *error_code = HTTP_SNIFFER_INVALID_INPUT_FORMAT_ERROR;
             if(aux != NULL){
                 free(aux);
             }
@@ -394,18 +391,18 @@ char * decodeBase64(const char * encoded, error_t * error_code){ // Algoritmo co
         }
         aux = resize_if_needed(aux, sizeof(*aux), length);
         if(aux == NULL){
-            *error_code = REALLOC_ERROR;
+            *error_code = HTTP_SNIFFER_REALLOC_ERROR;
             return NULL;
         }
         aux[length++] = a*4 + b/16;
         if(encoded[i+2] == '='){
             if(encoded[i+3] != '='){
-                *error_code = INVALID_INPUT_FORMAT_ERROR;
+                *error_code = HTTP_SNIFFER_INVALID_INPUT_FORMAT_ERROR;
                 return NULL;
             }
             aux = resize_if_needed(aux, sizeof(*aux), length);
             if(aux == NULL){
-                *error_code = REALLOC_ERROR;
+                *error_code = HTTP_SNIFFER_REALLOC_ERROR;
                 return NULL;
             }
             aux[length++] = '\0';
@@ -413,7 +410,7 @@ char * decodeBase64(const char * encoded, error_t * error_code){ // Algoritmo co
         } else {
             aux = resize_if_needed(aux, sizeof(*aux), length);
             if(aux == NULL){
-                *error_code = REALLOC_ERROR;
+                *error_code = HTTP_SNIFFER_REALLOC_ERROR;
                 return NULL;
             }
             aux[length++] = (b*16)%256 + c/4;
@@ -421,7 +418,7 @@ char * decodeBase64(const char * encoded, error_t * error_code){ // Algoritmo co
         if(encoded[i+3] == '='){
             aux = resize_if_needed(aux, sizeof(*aux), length);
             if(aux == NULL){
-                *error_code = REALLOC_ERROR;
+                *error_code = HTTP_SNIFFER_REALLOC_ERROR;
                 return NULL;
             }
             aux[length++] = '\0';
@@ -429,7 +426,7 @@ char * decodeBase64(const char * encoded, error_t * error_code){ // Algoritmo co
         } else {
             aux = resize_if_needed(aux, sizeof(*aux), length);
             if(aux == NULL){
-                *error_code = REALLOC_ERROR;
+                *error_code = HTTP_SNIFFER_REALLOC_ERROR;
                 return NULL;
             }
             aux[length++] = (c*64)%256 + d;
@@ -437,14 +434,14 @@ char * decodeBase64(const char * encoded, error_t * error_code){ // Algoritmo co
     }
     aux = resize_if_needed(aux, sizeof(*aux), length);
     if(aux == NULL){
-        *error_code = REALLOC_ERROR;
+        *error_code = HTTP_SNIFFER_REALLOC_ERROR;
         return NULL;
     }
     aux[length++] = '\0';
     return aux;
 }
 
-char base64table(const char c){ // Mirar tabla del paper subido por Juan en el foro
+static char base64table(const char c){ // Mirar tabla del paper subido por Juan en el foro
     if(c >= 'A' && c <= 'Z'){
         return c - 'A';
     }
@@ -467,19 +464,19 @@ char base64table(const char c){ // Mirar tabla del paper subido por Juan en el f
     }
 }
 
-error_t parseUserPass(struct http_credentials * ans, char * s){
+static http_sniffer_error_t parseUserPass(struct http_credentials * ans, char * s){
     int isUser = 1;
     int length = 0;
     for(int i = 0; s[i]; i++){
         if(s[i] == ':'){
             ans->user = resize_if_needed(ans->user, sizeof(*(ans->user)), length);
             if(ans->user == NULL){
-                return REALLOC_ERROR;
+                return HTTP_SNIFFER_REALLOC_ERROR;
             }
             ans->user[length++] = '\0';
             ans->user = realloc(ans->user, sizeof(*(ans->user)) * length);
             if(ans->user == NULL){
-                return REALLOC_ERROR;
+                return HTTP_SNIFFER_REALLOC_ERROR;
             }
             isUser = 0;
             length = 0;
@@ -487,41 +484,38 @@ error_t parseUserPass(struct http_credentials * ans, char * s){
             if(isUser){
                 ans->user = resize_if_needed(ans->user, sizeof(*(ans->user)), length);
                 if(ans->user == NULL){
-                    return REALLOC_ERROR;
+                    return HTTP_SNIFFER_REALLOC_ERROR;
                 }
                 ans->user[length++] = s[i];
             } else {
                 ans->password = resize_if_needed(ans->password, sizeof(*(ans->password)), length);
                 if(ans->password == NULL){
-                    return REALLOC_ERROR;
+                    return HTTP_SNIFFER_REALLOC_ERROR;
                 }
                 ans->password[length++] = s[i];
             }
         }
     }
     if(isUser){
-        return NO_COLON;
+        return HTTP_SNIFFER_NO_COLON;
     }
     ans->password = resize_if_needed(ans->password, sizeof(*(ans->password)), length);
     if(ans->password == NULL){
-        return REALLOC_ERROR;
+        return HTTP_SNIFFER_REALLOC_ERROR;
     }
     ans->password[length++] = '\0';
     ans->password = realloc(ans->password, sizeof(*(ans->password)) * length);
     if(ans->password == NULL){
-        return REALLOC_ERROR;
+        return HTTP_SNIFFER_REALLOC_ERROR;
     }
-    return NO_ERROR;
+    return HTTP_SNIFFER_NO_ERROR;
 }
 
-struct http_credentials * error(struct http_credentials * ans, error_t error_type){
-    free_http_credentials(ans);
-    ans = calloc(1, sizeof(*ans));
+static void error(struct http_credentials * ans, http_sniffer_error_t error_type){
     ans->error = error_type;
-    return ans;
 }
 
-char * add_char(char ** ans, char c, size_t * current_length){
+static char * add_char(char ** ans, char c, size_t * current_length){
     *ans = resize_if_needed(*ans, sizeof(**ans), *current_length);
     if(*ans == NULL){
         return NULL;
@@ -530,7 +524,7 @@ char * add_char(char ** ans, char c, size_t * current_length){
     return *ans;
 }
 
-void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length){
+static void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length){
     if(current_length % CHUNK_SIZE == 0){
         return realloc(ptr, ptr_size * (current_length + CHUNK_SIZE));
     }

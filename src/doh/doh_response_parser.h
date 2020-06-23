@@ -19,10 +19,10 @@
 #define IP_6_BYTES 16
 
 
-typedef enum errors{
-    INVALID_INPUT_FORMAT_ERROR,  // Si el string de entrada no estaba en algun formato vÃ¡lido de respuesta HTTP (1.1)
-    REALLOC_ERROR,               // Si al hacer un realloc se produjo algun error
-} http_response_parser_error_t;
+typedef enum doh_errors{
+    DOH_PARSER_INVALID_INPUT_FORMAT_ERROR,  // Si el string de entrada no estaba en algun formato vÃ¡lido de respuesta HTTP (1.1)
+    DOH_PARSER_REALLOC_ERROR,               // Si al hacer un realloc se produjo algun error
+} doh_parser_error_t;
 
 typedef struct {
   uint8_t byte[IP_6_BYTES]; // en orden inverso
@@ -64,6 +64,5 @@ bool doh_response_parser_error(struct doh_response *doh_response);
  * Libera la memoria utilizada por la estructura, si doh_response es NULL, no hace nada
  */ 
 void doh_response_parser_free(struct doh_response * http_response);
-
 
 #endif

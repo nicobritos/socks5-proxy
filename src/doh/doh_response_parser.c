@@ -10,12 +10,12 @@
 #define DNS_TYPE_AAAA 28
 
 /* Funciones auxiliares */
-void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
+static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
 
 struct doh_response *
 add_char_to_code_description(struct doh_response *ans, char c, size_t *code_description_current_length);
 
-struct doh_response *error(struct doh_response *ans, http_response_parser_error_t error_type);
+static struct doh_response *error(struct doh_response *ans, doh_parser_error_t error_type);
 
 struct doh_parser {
     struct parser *parser;
@@ -1074,7 +1074,7 @@ bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, siz
                 if (doh_response->code_description == NULL) {
                     parser_destroy(doh_response->_doh_parser->parser);
                     doh_response->_doh_parser->parser = NULL;
-                    return error(doh_response, REALLOC_ERROR);
+                    return error(doh_response, DOH_PARSER_REALLOC_ERROR);
                 }
                 break;
             case COPY_ANSWER_QTY_1:
@@ -1083,7 +1083,7 @@ bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, siz
             case COPY_ANSWER_QTY_2:
                 doh_response->_doh_parser->answer_qty += ret->data[0];
                 if (doh_response->_doh_parser->answer_qty > MAX_ADDR) {
-                    return error(doh_response, INVALID_INPUT_FORMAT_ERROR);
+                    return error(doh_response, DOH_PARSER_INVALID_INPUT_FORMAT_ERROR);
                 }
                 if (doh_response->_doh_parser->answer_qty == 0) {
                     return doh_response;
@@ -1105,7 +1105,7 @@ bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, siz
                 if (doh_response->ipv4_qty >= doh_response->_doh_parser->answer_qty) {
                     parser_destroy(doh_response->_doh_parser->parser);
                     doh_response->_doh_parser->parser = NULL;
-                    return error(doh_response, INVALID_INPUT_FORMAT_ERROR);
+                    return error(doh_response, DOH_PARSER_INVALID_INPUT_FORMAT_ERROR);
                 }
                 doh_response->ipv4_addr[doh_response->ipv4_qty] |= ((uint32_t) ret->data[0]) << (8u * (IP_4_BYTES - 1 - doh_response->_doh_parser->current_ip_byte));
                 doh_response->_doh_parser->current_ip_byte++;
@@ -1118,7 +1118,7 @@ bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, siz
                 if (doh_response->ipv6_qty >= doh_response->_doh_parser->answer_qty) {
                     parser_destroy(doh_response->_doh_parser->parser);
                     doh_response->_doh_parser->parser = NULL;
-                    return error(doh_response, INVALID_INPUT_FORMAT_ERROR);
+                    return error(doh_response, DOH_PARSER_INVALID_INPUT_FORMAT_ERROR);
                 }
                 doh_response->ipv6_addr[doh_response->ipv6_qty].byte[doh_response->_doh_parser->current_ip_byte++] = ret->data[0];
                 if (doh_response->_doh_parser->current_ip_byte == IP_6_BYTES) {
@@ -1136,7 +1136,7 @@ bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, siz
             case INVALID_INPUT_FORMAT_T:
                 parser_destroy(doh_response->_doh_parser->parser);
                 doh_response->_doh_parser->parser = NULL;
-                return error(doh_response, INVALID_INPUT_FORMAT_ERROR);
+                return error(doh_response, DOH_PARSER_INVALID_INPUT_FORMAT_ERROR);
             default:
                 break;
         }
@@ -1149,10 +1149,10 @@ bool doh_response_parser_feed(struct doh_response *doh_response, uint8_t *s, siz
         doh_response->_doh_parser->parser = NULL;
 
         if (doh_response->ipv4_qty > 0 && doh_response->_doh_parser->current_ip_byte != 0) {
-            return error(doh_response, INVALID_INPUT_FORMAT_ERROR);
+            return error(doh_response, DOH_PARSER_INVALID_INPUT_FORMAT_ERROR);
         }
         if (doh_response->ipv6_qty > 0 && doh_response->_doh_parser->current_ip_byte != 0) {
-            return error(doh_response, INVALID_INPUT_FORMAT_ERROR);
+            return error(doh_response, DOH_PARSER_INVALID_INPUT_FORMAT_ERROR);
         }
         return true;
     }
@@ -1198,18 +1198,18 @@ add_char_to_code_description(struct doh_response *ans, char c, size_t *code_desc
     ans->code_description = resize_if_needed(ans->code_description, sizeof(*(ans->code_description)),
                                              *code_description_current_length);
     if (ans->code_description == NULL) {
-        return error(ans, REALLOC_ERROR);
+        return error(ans, DOH_PARSER_REALLOC_ERROR);
     }
     ans->code_description[(*code_description_current_length)++] = c;
     return ans;
 }
 
-struct doh_response *error(struct doh_response *ans, http_response_parser_error_t error_type) {
+static struct doh_response *error(struct doh_response *ans, doh_parser_error_t error_type) {
     ans->status_code = error_type;
     return ans;
 }
 
-void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
+static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
     if (current_length % CHUNK_SIZE == 0) {
         return realloc(ptr, ptr_size * (current_length + CHUNK_SIZE));
     }
