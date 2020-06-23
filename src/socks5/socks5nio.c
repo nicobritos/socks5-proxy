@@ -426,7 +426,7 @@ static const struct state_definition client_statbl[] = {
                 .state = COPY,
                 .on_arrival = copy_init,
                 .on_read_ready = copy_read,
-                .on_write_ready = copy_write
+                .on_write_ready = copy_write,
         }, {
                 .state = DONE,
         }, {
@@ -662,6 +662,8 @@ static void socksv5_close(struct selector_key *key) {
         if (s->client_fd != -1) {
             log_close(key);
         }
+
+        request_parser_close(&s->client_request.parser);
         if (s->credentials.username != NULL) {
             free(s->credentials.username);
             s->credentials.username = NULL;
@@ -682,6 +684,12 @@ static void socksv5_close(struct selector_key *key) {
             free(s->dns.request);
             s->dns.request = NULL;
         }
+        if (s->client_sniffers.pop3_data.parser != NULL) {
+            pop3_sniffer_destroy(s->client_sniffers.pop3_data.parser);
+            s->client_sniffers.pop3_data.parser = NULL;
+        }
+        free_pop3_credentials(&s->client_sniffers.pop3_data.credentials);
+        free_http_credentials(&s->client_sniffers.http_credentials);
     }
     socks5_destroy(s);
 }

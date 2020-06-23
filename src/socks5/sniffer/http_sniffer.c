@@ -8,12 +8,12 @@
 #define CHUNK_SIZE 10
 
 /* Funciones auxiliares */
-void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length);
-char * add_char(char ** ans, char c, size_t * current_length);
-void error(struct http_credentials * ans, http_sniffer_error_t error_type);
-char * decodeBase64(const char * encoded, http_sniffer_error_t * error_code);
-char base64table(const char c);
-http_sniffer_error_t parseUserPass(struct http_credentials * ans, char * s);
+static void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length);
+static char * add_char(char ** ans, char c, size_t * current_length);
+static void error(struct http_credentials * ans, http_sniffer_error_t error_type);
+static char * decodeBase64(const char * encoded, http_sniffer_error_t * error_code);
+static char base64table(const char c);
+static http_sniffer_error_t parseUserPass(struct http_credentials * ans, char * s);
 
 // definición de maquina
 
@@ -370,11 +370,10 @@ void free_http_credentials(struct http_credentials * ans){
         if(ans->parser != NULL){
             parser_destroy(ans->parser);
         }
-        free(ans);
     }
 }
 
-char * decodeBase64(const char * encoded, http_sniffer_error_t * error_code){ // Algoritmo copiado del pseudocodigo del paper subido por Juan en el foro
+static char * decodeBase64(const char * encoded, http_sniffer_error_t * error_code){ // Algoritmo copiado del pseudocodigo del paper subido por Juan en el foro
     char * aux = NULL;
     size_t encoded_length = strlen(encoded);
     size_t length = 0;
@@ -442,7 +441,7 @@ char * decodeBase64(const char * encoded, http_sniffer_error_t * error_code){ //
     return aux;
 }
 
-char base64table(const char c){ // Mirar tabla del paper subido por Juan en el foro
+static char base64table(const char c){ // Mirar tabla del paper subido por Juan en el foro
     if(c >= 'A' && c <= 'Z'){
         return c - 'A';
     }
@@ -465,7 +464,7 @@ char base64table(const char c){ // Mirar tabla del paper subido por Juan en el f
     }
 }
 
-http_sniffer_error_t parseUserPass(struct http_credentials * ans, char * s){
+static http_sniffer_error_t parseUserPass(struct http_credentials * ans, char * s){
     int isUser = 1;
     int length = 0;
     for(int i = 0; s[i]; i++){
@@ -512,11 +511,11 @@ http_sniffer_error_t parseUserPass(struct http_credentials * ans, char * s){
     return HTTP_SNIFFER_NO_ERROR;
 }
 
-void error(struct http_credentials * ans, http_sniffer_error_t error_type){
+static void error(struct http_credentials * ans, http_sniffer_error_t error_type){
     ans->error = error_type;
 }
 
-char * add_char(char ** ans, char c, size_t * current_length){
+static char * add_char(char ** ans, char c, size_t * current_length){
     *ans = resize_if_needed(*ans, sizeof(**ans), *current_length);
     if(*ans == NULL){
         return NULL;
@@ -525,7 +524,7 @@ char * add_char(char ** ans, char c, size_t * current_length){
     return *ans;
 }
 
-void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length){
+static void * resize_if_needed(void * ptr, size_t ptr_size, size_t current_length){
     if(current_length % CHUNK_SIZE == 0){
         return realloc(ptr, ptr_size * (current_length + CHUNK_SIZE));
     }
