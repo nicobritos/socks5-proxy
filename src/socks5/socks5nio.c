@@ -21,6 +21,7 @@
 #include "../doh/doh.h"
 #include "../doh/doh_response_parser.h"
 #include "../configuration.h"
+#include "sniffer/sniffed_credentials.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 #define MIN(x, y) (x < y ? x : y)
@@ -203,22 +204,6 @@ struct request_st {
     int *server_fd;
 };
 
-//struct udp_request_st {
-//    buffer *read_buffer;
-//    buffer *write_buffer;
-//
-//    /** aqui guardamos la info de la request (address, port, cmd) */
-//    const struct tcp_request request;
-//    /** parser */
-//    struct request_parser parser;
-//
-//    /** status, campo de reply */
-//    enum socks_response_status status;
-//
-//    const int *client_fd;
-//    int *server_fd;
-//};
-
 /** COPY */
 struct copy {
     /** el otro fd */
@@ -297,10 +282,12 @@ struct socks5 {
  *
  * No hay race conditions porque hay un solo hilo
  */
-static const unsigned max_pool = 500;
-static unsigned pool_size = 0;
+static const uint32_t max_pool = 500;
+static uint32_t pool_size = 0;
 static struct socks5 *pool = NULL;
 static log_t logger;
+static uint64_t max_clients, current_clients, bytes_transferred;
+static sniffed_credentials_list sniffed_credentials_l;
 
 /** -------------------- DECLARATIONS --------------------- */
 /** ---------------- SOCKSV5 ---------------- */
@@ -438,11 +425,60 @@ static const struct state_definition client_statbl[] = {
 /** -------------------- DEFINITIONS --------------------- */
 /** ---------------- SOCKSV5 ---------------- */
 /** ---------------- PUBLIC ---------------- */
-void socksv5_init() {
-    logger = init_log(SOCKS_LOG_FILENAME, LOG_LEVEL);
+void socks_init() {
+    logger = logger_init_log(SOCKS_LOG_FILENAME, DEFAULT_LOG_LEVEL);
+    sniffed_credentials_l = sniffed_credentials_create_list();
+    if (sniffed_credentials_l == NULL && logger != NULL) {
+        logger_append_to_log(
+                logger,
+                log_severity_warning,
+                "No se pudo crear el listado para almacenar las contrasenas sniffeadas",
+                0);
+    }
 }
 
-void socksv5_pool_destroy() {
+/**
+ * Devuelve el logger del socks o NULL si no esta inicializado
+ * @return
+ */
+log_t socks_get_log() {
+    return logger;
+}
+
+/**
+ * Devuelve la cantidad total de clientes que se conectaron
+ * desde que se inicio el servidor
+ * @return
+ */
+uint64_t socks_get_total_connections() {
+    return max_clients;
+}
+
+/**
+ * Devuelve la cantidad de clientes conectados en el momento
+ * @return
+ */
+uint64_t socks_get_current_connections() {
+    return current_clients;
+}
+
+/**
+ * Devuelve la cantidad total de bytes transferidos (down + up)
+ * @return
+ */
+uint64_t socks_get_total_bytes_transferred() {
+    return bytes_transferred;
+}
+
+/**
+ * Devuelve una lista de sniffed credentials
+ * @return
+ */
+sniffed_credentials_list socks_get_sniffed_credentials_list() {
+    return sniffed_credentials_l;
+}
+
+void socks_pool_destroy() {
     struct socks5 *next, *s;
 
     for (s = pool; s != NULL; s = next) {
@@ -451,13 +487,18 @@ void socksv5_pool_destroy() {
     }
 
     if (logger != NULL) {
-        close_log(logger);
+        logger_close_log(logger);
         logger = NULL;
+    }
+
+    if (sniffed_credentials_l != NULL) {
+        // TODO: free de todos los credentials
+        sniffed_credentials_destroy(sniffed_credentials_l);
     }
 }
 
 /** Intenta aceptar la nueva conexión entrante*/
-void socksv5_passive_accept(struct selector_key *key) {
+void socks_passive_accept(struct selector_key *key) {
     struct sockaddr_storage client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
     struct socks5 *state = NULL;
@@ -510,6 +551,9 @@ static struct socks5 *socks5_new(int client_fd) {
 
     ret->references = 1;
 
+    current_clients++;
+    max_clients++;
+
     return ret;
 }
 
@@ -523,15 +567,15 @@ static const struct state_definition *socks5_describe_states() {
 static void socks5_destroy(struct socks5 *s) {
     if (s != NULL) {
         if (s->references == 1) {
-            if (s != NULL) {
-                if (pool_size < max_pool) {
-                    s->next = pool;
-                    pool = s;
-                    pool_size++;
-                } else {
-                    socks5_destroy_(s);
-                }
+            if (pool_size < max_pool) {
+                s->next = pool;
+                pool = s;
+                pool_size++;
+            } else {
+                socks5_destroy_(s);
             }
+
+            current_clients--;
         } else {
             s->references -= 1;
         }
@@ -675,7 +719,7 @@ static void log_close(const struct selector_key *key) {
         const char *bytes_download_multiplier = byte_formatter_format(s->bytes_downloaded, &formatted_bytes_download);
         const char *bytes_upload_multiplier = byte_formatter_format(s->bytes_uploaded, &formatted_bytes_upload);
         if (s->credentials.username != NULL) {
-            append_to_log(
+            logger_append_to_log(
                     logger,
                     log_severity_info,
                     "El usuario: %s con ip: %s y puerto %d se ha desconectado. Bytes transferidos: %.3f%s download, %.3f%s upload",
@@ -689,7 +733,7 @@ static void log_close(const struct selector_key *key) {
                     bytes_upload_multiplier
             );
         } else {
-            append_to_log(
+            logger_append_to_log(
                     logger,
                     log_severity_info,
                     "El usuario con ip: %s y puerto %d se ha desconectado. Bytes transferidos: %.3f%s download, %.3f%s upload",
@@ -795,7 +839,7 @@ static unsigned hello_write(struct selector_key *key) {
                         char ip_buffer[INET6_ADDRSTRLEN];
                         uint16_t port;
                         if (extract_ip_port_(&ATTACHMENT(key)->client_addr, ip_buffer, &port)) {
-                            append_to_log(
+                            logger_append_to_log(
                                     logger,
                                     log_severity_info,
                                     "El usuario con ip: %s y puerto %d se conecto sin autenticacion",
@@ -872,7 +916,7 @@ static unsigned auth_user_pass_process(struct auth_user_pass_st *d, const struct
         uint16_t port;
         if (extract_ip_port_(&ATTACHMENT(key)->client_addr, ip_buffer, &port)) {
             if (status == AUTH_USER_PASS_STATUS_CREDENTIALS_OK) {
-                append_to_log(
+                logger_append_to_log(
                         logger,
                         log_severity_info,
                         "El usuario con ip: %s y puerto %d se conecto como %s",
@@ -882,7 +926,7 @@ static unsigned auth_user_pass_process(struct auth_user_pass_st *d, const struct
                         d->credentials->username
                 );
             } else {
-                append_to_log(
+                logger_append_to_log(
                         logger,
                         log_severity_info,
                         "El usuario con ip: %s y puerto %d intento conectarse con credenciales invalidas",
@@ -1114,7 +1158,7 @@ static void log_request(const struct selector_key *key, const struct request_par
 
         if (s->credentials.username != NULL) {
             if (s->client_request.request.address_type == REQUEST_ATYP_DOMAIN_NAME) {
-                append_to_log(
+                logger_append_to_log(
                         logger,
                         log_severity_info,
                         "El usuario: %s con ip: %s y puerto %d %s a: %s [%s] al puerto %d [mapeado al %d] con estado: %s",
@@ -1130,7 +1174,7 @@ static void log_request(const struct selector_key *key, const struct request_par
                         socks_status_str
                 );
             } else {
-                append_to_log(
+                logger_append_to_log(
                         logger,
                         log_severity_info,
                         "El usuario: %s con ip: %s y puerto %d %s a: %s al puerto %d [mapeado al %d] con estado: %s",
@@ -1147,7 +1191,7 @@ static void log_request(const struct selector_key *key, const struct request_par
             }
         } else {
             if (s->client_request.request.address_type == REQUEST_ATYP_DOMAIN_NAME) {
-                append_to_log(
+                logger_append_to_log(
                         logger,
                         log_severity_info,
                         "El usuario con ip: %s y puerto %d %s a: %s [%s] al puerto %d [mapeado al %d] con estado: %s",
@@ -1162,7 +1206,7 @@ static void log_request(const struct selector_key *key, const struct request_par
                         socks_status_str
                 );
             } else {
-                append_to_log(
+                logger_append_to_log(
                         logger,
                         log_severity_info,
                         "El usuario con ip: %s y puerto %d %s a: %s al puerto %d [mapeado al %d] con estado: %s",
@@ -1522,6 +1566,7 @@ static unsigned copy_write(struct selector_key *key) {
         } else {
             ATTACHMENT(key)->bytes_uploaded += n;
         }
+        bytes_transferred += n;
     }
     copy_compute_interests(key->s, d);
     copy_compute_interests(key->s, d->other);
