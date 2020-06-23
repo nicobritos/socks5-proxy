@@ -292,66 +292,68 @@ static struct parser_definition definition = {
     .start_state  = ST_START,
 };
 
-struct http_credentials * http_sniffer(char * s){
-    struct parser *parser = parser_init(parser_no_classes(), &definition);
+struct http_credentials * http_sniffer_init(){
     struct http_credentials * ans = calloc(1, sizeof(*ans));
-    size_t auth_current_length = 0;
-    char finish = 0;
-    char * auth = NULL;
-    for(int i = 0; !finish && s[i]; i++){
-        struct parser_event* ret = parser_feed(parser, s[i]);
+    ans->parser = parser_init(parser_no_classes(), &definition);
+    return ans;
+}
+
+struct http_credentials * http_sniffer_consume(uint8_t * s, size_t length, struct http_credentials * ans){
+    for(int i = 0; !ans->finished && i<length; i++){
+        const struct parser_event* ret = parser_feed(ans->parser, s[i]);
         switch (ret->type){
             case COPY_ENCODED_AUTH:
-                add_char(&auth, ret->data[0], &auth_current_length);
-                if(auth == NULL){
+                add_char(&(ans->encoded_auth), ret->data[0], &(ans->auth_current_length));
+                if(ans->encoded_auth == NULL){
                     return error(ans, REALLOC_ERROR);
                 }
             break;
             case COPY_ENCODED_AUTH_R:
-                add_char(&auth, '\r', &auth_current_length);
-                if(auth == NULL){
+                add_char(&(ans->encoded_auth), '\r', &(ans->auth_current_length));
+                if(ans->encoded_auth == NULL){
                     return error(ans, REALLOC_ERROR);
                 }
-                add_char(&auth, ret->data[0], &auth_current_length);
-                if(auth == NULL){
+                add_char(&(ans->encoded_auth), ret->data[0], &(ans->auth_current_length));
+                if(ans->encoded_auth == NULL){
                     return error(ans, REALLOC_ERROR);
                 }
             break;
             case END_ENCODED_AUTH:
-                add_char(&auth, '\0', &auth_current_length);
-                if(auth == NULL){
+                add_char(&(ans->encoded_auth), '\0', &(ans->auth_current_length));
+                if(ans->encoded_auth == NULL){
                     return error(ans, REALLOC_ERROR);
                 }
-                auth = realloc(auth, sizeof(*auth) * auth_current_length);
-                if(auth == NULL){
+                ans->encoded_auth = realloc(ans->encoded_auth, sizeof(*ans->encoded_auth) * (ans->auth_current_length));
+                if(ans->encoded_auth == NULL){
                     return error(ans, REALLOC_ERROR);
                 }
-                finish = 1;
+                ans->finished = 1;
             break;
             case INVALID_INPUT_FORMAT_T:
                 return error(ans, INVALID_INPUT_FORMAT_ERROR);
-                finish = 1;
             break;
         }
     }
-    parser_destroy(parser);
-    auth_current_length--;
-    if(auth == NULL || ((auth_current_length % 4) != 0)){
-        return error(ans, INVALID_INPUT_FORMAT_ERROR);
-    }
-    error_t error_code = NO_ERROR;
-    char * temp = decodeBase64(auth, &error_code);
-    free(auth);
-    if(error_code != NO_ERROR){
-        return error(ans, error_code);
-    }
-    if(temp == NULL){
-        return error(ans, INVALID_INPUT_FORMAT_ERROR);
-    }
-    error_code = parseUserPass(ans, temp);
-    free(temp);
-    if(error_code != NO_ERROR){
-        return error(ans, error_code);
+    if(ans->finished){
+        (ans->auth_current_length)--;
+        if(ans->encoded_auth == NULL || (((ans->auth_current_length % 4)) != 0)){
+            return error(ans, INVALID_INPUT_FORMAT_ERROR);
+        }
+        error_t error_code = NO_ERROR;
+        char * temp = decodeBase64(ans->encoded_auth, &error_code);
+        free(ans->encoded_auth);
+        ans->encoded_auth = NULL;
+        if(error_code != NO_ERROR){
+            return error(ans, error_code);
+        }
+        if(temp == NULL){
+            return error(ans, INVALID_INPUT_FORMAT_ERROR);
+        }
+        error_code = parseUserPass(ans, temp);
+        free(temp);
+        if(error_code != NO_ERROR){
+            return error(ans, error_code);
+        }
     }
     return ans;
 }
@@ -361,8 +363,14 @@ void free_http_credentials(struct http_credentials * ans){
         if(ans->user != NULL){
             free(ans->user);
         }
-        if(ans->password){
+        if(ans->password != NULL){
             free(ans->password);
+        }
+        if(ans->encoded_auth != NULL){
+            free(ans->encoded_auth);
+        }
+        if(ans->parser != NULL){
+            parser_destroy(ans->parser);
         }
         free(ans);
     }
@@ -508,9 +516,7 @@ error_t parseUserPass(struct http_credentials * ans, char * s){
 
 struct http_credentials * error(struct http_credentials * ans, error_t error_type){
     free_http_credentials(ans);
-    ans = malloc(sizeof(*ans));
-    ans->user = NULL;
-    ans->password = NULL;
+    ans = calloc(1, sizeof(*ans));
     ans->error = error_type;
     return ans;
 }
@@ -544,7 +550,7 @@ int main(int argc, char ** argv){
     FILE * fp;
     char c;
     int size = 1000;
-    char *buffer = calloc(1,size * sizeof(*buffer));
+    uint8_t *buffer = calloc(1,size * sizeof(*buffer));
     if(buffer == NULL){
         return 1;
     }
@@ -565,15 +571,33 @@ int main(int argc, char ** argv){
         i++;
     }
     buffer = realloc(buffer, (i+1) * sizeof(*buffer));
-    buffer[i] = '\0';
     fclose(fp);
 
-    struct http_credentials * ans = http_sniffer(buffer);
-    if(ans->error != 0){
-        printf("error\n");
+    struct http_credentials * ans = http_sniffer_init();
+    int dividing_index = i/2;
+    printf("Round 1: de 0 a %d\n", dividing_index-1);
+    ans = http_sniffer_consume(buffer, dividing_index, ans);
+    if(ans->finished){
+        if(ans->error != NO_ERROR){
+            printf("error\n");
+        } else {
+            printf("%s\n", ans->user);
+            printf("%s\n", ans->password);
+        }
     } else {
-        printf("%s\n", ans->user);
-        printf("%s\n", ans->password);
+        printf("No termine todavia\n");
+    }
+    if(!ans->finished && i != 0){
+        printf("Round 2: de %d a %d\n", dividing_index, i-1);
+        ans = http_sniffer_consume(buffer + dividing_index, i-dividing_index, ans);
+        if(ans->error != NO_ERROR){
+            printf("error\n");
+        } else if(!ans->finished){
+            printf("No termine\n");
+        } else {
+            printf("%s\n", ans->user);
+            printf("%s\n", ans->password);
+        }
     }
     free_http_credentials(ans);
     free(buffer);
