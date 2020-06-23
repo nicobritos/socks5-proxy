@@ -7,9 +7,9 @@
 #define CHUNK_SIZE 10
 
 /* Funciones auxiliares */
-void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
+static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
 
-struct vars *error(struct vars *ans, parser_error_t error_type);
+static struct vars *error(struct vars *ans, parser_error_t error_type);
 
 // definición de maquina
 
@@ -173,14 +173,14 @@ void free_vars(struct vars *vars) {
     }
 }
 
-struct vars *error(struct vars *ans, parser_error_t error_type) {
+static struct vars *error(struct vars *ans, parser_error_t error_type) {
     free_vars(ans);
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;
     return ans;
 }
 
-void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
+static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
     if (current_length % CHUNK_SIZE == 0) {
         return realloc(ptr, ptr_size * (current_length + CHUNK_SIZE));
     }
@@ -196,41 +196,41 @@ void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
  */
 
 
-int main(int argc, char ** argv){
-    FILE * fp;
-    int16_t c;
-    int size = 1000;
-    uint8_t *buffer = calloc(1,size * sizeof(*buffer));
-    if(buffer == NULL){
-        return 1;
-    }
-    if(argc != 2){
-        return 1;
-    }
-    fp = fopen(argv[1], "r");
-    int i = 0;
-    while((c=fgetc(fp)) != EOF){
-        if(i == size){
-            size += size;
-            buffer = realloc(buffer, size * sizeof(*buffer));
-            if(buffer == NULL){
-                return 1;
-            }
-        }
-        buffer[i] = c;
-        i++;
-    }
-    buffer = realloc(buffer, i * sizeof(*buffer));
-    fclose(fp);
-
-    struct vars * ans = get_vars_parser(buffer, i);
-    free(buffer);
-    if(ans->error != NO_ERROR){
-        printf("error\n");
-    } else {
-        printf("IO Timeout = %zu\n", ans->io_timeout);
-        printf("Logger Severity = %u\n", ans->lmode);
-    }
-    free_vars(ans);
-    return 0;
-}
+//int main(int argc, char ** argv){
+//    FILE * fp;
+//    int16_t c;
+//    int size = 1000;
+//    uint8_t *buffer = calloc(1,size * sizeof(*buffer));
+//    if(buffer == NULL){
+//        return 1;
+//    }
+//    if(argc != 2){
+//        return 1;
+//    }
+//    fp = fopen(argv[1], "r");
+//    int i = 0;
+//    while((c=fgetc(fp)) != EOF){
+//        if(i == size){
+//            size += size;
+//            buffer = realloc(buffer, size * sizeof(*buffer));
+//            if(buffer == NULL){
+//                return 1;
+//            }
+//        }
+//        buffer[i] = c;
+//        i++;
+//    }
+//    buffer = realloc(buffer, i * sizeof(*buffer));
+//    fclose(fp);
+//
+//    struct vars * ans = get_vars_parser(buffer, i);
+//    free(buffer);
+//    if(ans->error != NO_ERROR){
+//        printf("error\n");
+//    } else {
+//        printf("IO Timeout = %zu\n", ans->io_timeout);
+//        printf("Logger Severity = %u\n", ans->lmode);
+//    }
+//    free_vars(ans);
+//    return 0;
+//}

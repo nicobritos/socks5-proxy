@@ -19,8 +19,8 @@
 #include <errno.h>
 #include <getopt.h>
 
-#include "monitor_parser/client/auth_server_response_parser.h"
-#include "monitor_parser/client/get_metrics_parser.h"
+#include "parser/client/auth_server_response_parser.h"
+#include "parser/client/get_metrics_parser.h"
 
 #include "MonitorClient.h"
 
