@@ -19,14 +19,18 @@ struct metrics {
     uint64_t actual_cons;
     uint64_t bytes_transferred;
     parser_error_t error;
+    struct parser * parser;
+    uint8_t finished;
 };
+
+struct metrics * get_metrics_parser_init();
 
 /**
  * Dado un datagrama (array de bytes) de respuesta del comando GET METRICS (ver RFC) para el proxy
  * y su longitud, parsea el datagrama.
  * Si no cumple con el RFC devuelve INVALID_INPUT_FORMAT_ERROR en el campo de error de la estructura.
  */
-struct metrics * get_metrics_parser(uint8_t *s, size_t length);
+struct metrics * get_metrics_parser_consume(uint8_t *s, size_t length, struct metrics * ans);
 
 /**
  * Libera la memoria utilizada por la estructura, si metrics es NULL, no hace nada

@@ -3,10 +3,9 @@
 #include <string.h>
 #include <stdio.h>
 
-#include <unistd.h>
 #include <arpa/inet.h>
 
-#include "include/netutils.h"
+#include "netutils.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 

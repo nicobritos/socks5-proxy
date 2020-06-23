@@ -94,6 +94,32 @@ enum auth_user_pass_helper_status auth_user_pass_helper_add(const struct auth_us
     return auth_user_pass_helper_status_ok;
 }
 
+enum auth_user_pass_helper_status auth_user_pass_helper_update_password(const struct auth_user_pass_credentials *credentials) {
+    if (credentials_map == NULL) return auth_user_pass_helper_status_error_not_initialized;
+    if (credentials == NULL || credentials->password == NULL)
+        return auth_user_pass_helper_status_error_invalid_credentials;
+
+    size_t password_length = strlen(credentials->password);
+    if (password_length < 1)
+        return auth_user_pass_helper_status_error_invalid_credentials;
+
+    sorted_hashmap_node node = sorted_hashmap_find(credentials_map, (void*)credentials);
+    if (node == NULL) {
+        return auth_user_pass_helper_status_error_user_not_found;
+    }
+
+    struct auth_user_pass_credentials *node_credentials = sorted_hashmap_get_element(node);
+    char * aux = node_credentials->password;
+    node_credentials->password = malloc(sizeof(*node_credentials->password) * password_length + 1);
+    if (node_credentials->password == NULL) {
+        return auth_user_pass_helper_status_error_no_memory;
+    }
+    memcpy(node_credentials->password, credentials->password, password_length + 1);
+    free(aux);
+
+    return auth_user_pass_helper_status_ok;
+}
+
 /**
  * Activa o desactiva un usuario. Deberia de ser solo usable desde el monitor
  */

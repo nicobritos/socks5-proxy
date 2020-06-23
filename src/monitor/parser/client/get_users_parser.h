@@ -23,14 +23,19 @@ struct users {
     struct user * users;
     size_t users_qty;
     parser_error_t error;
+    struct parser *parser;
+    size_t current_user_length;
+    uint8_t finished;
 };
+
+struct users * get_users_parser_init();
 
 /**
  * Dado un datagrama (array de bytes) de respuesta del comando GET USERS (ver RFC) para el proxy
  * y su longitud, parsea el datagrama.
  * Si no cumple con el RFC devuelve INVALID_INPUT_FORMAT_ERROR en el campo de error de la estructura.
  */
-struct users * get_users_parser(uint8_t *s, size_t length);
+struct users * get_users_parser_consume(uint8_t *s, size_t length, struct users * ans);
 
 /**
  * Libera la memoria utilizada por la estructura, si metrics es NULL, no hace nada

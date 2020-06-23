@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../../utils/parser.h"
+#include "../../../utils/parser.h"
 #include "get_users_parser.h"
 
 #define CHUNK_SIZE 10
@@ -121,50 +121,40 @@ static struct parser_definition definition = {
         .start_state  = ST_START,
 };
 
-struct users * get_users_parser(uint8_t *s, size_t length) {
+struct users * get_users_parser_init(){
     struct users * ans = calloc(1, sizeof(*ans));
-    struct parser *parser = parser_init(parser_no_classes(), &definition);
-    size_t current_user_length = 0;
-    int finished = 0;
+    ans->parser = parser_init(parser_no_classes(), &definition);
+}
+
+struct users * get_users_parser_consume(uint8_t *s, size_t length, struct users * ans) {
     for (size_t i = 0; i<length; i++) {
-        const struct parser_event* ret = parser_feed(parser, s[i]);
+        const struct parser_event* ret = parser_feed(ans->parser, s[i]);
         switch (ret->type) {
             case COPY_USER:
-                if(current_user_length == 0){
+                if(ans->current_user_length == 0){
                     ans->users = resize_if_needed(ans->users, sizeof(*(ans->users)), ans->users_qty);
                     if(ans->users == NULL){
-                        parser_destroy(parser);
                         return error(ans, REALLOC_ERROR);
                     }
                     ans->users[ans->users_qty].user = NULL;
                 }
-                ans->users[ans->users_qty].user  = resize_if_needed(ans->users[ans->users_qty].user , sizeof(*(ans->users[ans->users_qty].user)), current_user_length);
+                ans->users[ans->users_qty].user  = resize_if_needed(ans->users[ans->users_qty].user , sizeof(*(ans->users[ans->users_qty].user)), ans->current_user_length);
                 if(ans->users[ans->users_qty].user == NULL){
-                    parser_destroy(parser);
                     return error(ans, REALLOC_ERROR);
                 }
-                ans->users[ans->users_qty].user[current_user_length++] = s[i];
+                ans->users[ans->users_qty].user[(ans->current_user_length)++] = s[i];
             break;
             case COPY_STATUS:
-                current_user_length = 0;
+                ans->current_user_length = 0;
                 ans->users[(ans->users_qty)++].status = s[i];
             break;
             case END_T:
-                finished = 1;
+                ans->finished = 1;
             break;
             case INVALID_INPUT_FORMAT_T:
-                parser_destroy(parser);
                 return error(ans, INVALID_INPUT_FORMAT_ERROR);
         }
     }
-    if(!finished){
-        if(current_user_length != 0){
-            free(ans->users[ans->users_qty].user); // Libero el string que estaba armando
-        }
-        parser_destroy(parser);
-        return error(ans, INVALID_INPUT_FORMAT_ERROR);
-    }
-    parser_destroy(parser);
     return ans;
 }
 
@@ -176,6 +166,10 @@ void free_users(struct users *users) {
             }
             free(users->users);
             users->users_qty = 0;
+        }
+        if(users->parser != NULL){
+            parser_destroy(users->parser);
+            users->parser = NULL;
         }
         free(users);
     }

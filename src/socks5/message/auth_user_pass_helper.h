@@ -50,6 +50,8 @@ enum auth_user_pass_helper_status auth_user_pass_helper_add(const struct auth_us
  */
 enum auth_user_pass_helper_status auth_user_pass_helper_remove(const char *username);
 
+enum auth_user_pass_helper_status auth_user_pass_helper_update_password(const struct auth_user_pass_credentials *credentials);
+
 /**
  * Activa o desactiva un usuario. Deberia de ser solo usable desde el monitor
  */

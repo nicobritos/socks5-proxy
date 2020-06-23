@@ -1,15 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../../utils/parser.h"
-#include "get_access_log_parser.h"
+#include "../../../utils/parser.h"
+#include "get_passwords_parser.h"
 
 #define CHUNK_SIZE 10
 
 /* Funciones auxiliares */
 void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
 
-struct access_log *error(struct access_log *ans, parser_error_t error_type);
+struct passwords *error(struct passwords *ans, parser_error_t error_type);
 
 parser_error_t add_to_string(char ** s, uint8_t c, size_t * current_length);
 
@@ -53,13 +53,13 @@ enum states {
     ST_TIMEZONE_4,
     ST_END_TIME,
     ST_USER,
-    ST_A,
-    ST_A_END,
-    ST_OIP,
-    ST_OPORT,
+    ST_P,
+    ST_P_END,
+    ST_PROTOCOL,
     ST_DESTINATION,
     ST_DPORT,
-    ST_STATUS,
+    ST_USERNAME,
+    ST_PASSWORD,
     ST_END_ENTRY,
     ST_END,
     ST_INVALID_INPUT_FORMAT,
@@ -69,11 +69,11 @@ enum event_type {
     SUCCESS,
     COPY_TIME,
     COPY_USER,
-    COPY_OIP,
-    COPY_OPORT,
+    COPY_PROTOCOL,
     COPY_DESTINATION,
     COPY_DPORT,
-    COPY_STATUS,
+    COPY_USERNAME,
+    COPY_PASSWORD,
     END_ENTRY_T,
     END_T,
     INVALID_INPUT_FORMAT_T,
@@ -101,15 +101,8 @@ copy_user(struct parser_event *ret, const uint8_t c) {
 }
 
 static void
-copy_oip(struct parser_event *ret, const uint8_t c) {
-    ret->type = COPY_OIP;
-    ret->n = 1;
-    ret->data[0] = c;
-}
-
-static void
-copy_oport(struct parser_event *ret, const uint8_t c) {
-    ret->type = COPY_OPORT;
+copy_protocol(struct parser_event *ret, const uint8_t c) {
+    ret->type = COPY_PROTOCOL;
     ret->n = 1;
     ret->data[0] = c;
 }
@@ -129,8 +122,15 @@ copy_dport(struct parser_event *ret, const uint8_t c) {
 }
 
 static void
-copy_status(struct parser_event *ret, const uint8_t c) {
-    ret->type = COPY_STATUS;
+copy_username(struct parser_event *ret, const uint8_t c) {
+    ret->type = COPY_USERNAME;
+    ret->n = 1;
+    ret->data[0] = c;
+}
+
+static void
+copy_password(struct parser_event *ret, const uint8_t c) {
+    ret->type = COPY_PASSWORD;
     ret->n = 1;
     ret->data[0] = c;
 }
@@ -512,50 +512,23 @@ static const struct parser_state_transition END_TIME[] = {
 };
 
 static const struct parser_state_transition USER[] = {
-    {.when = '\0', .dest = ST_A, .act1 = copy_user,},
+    {.when = '\0', .dest = ST_P, .act1 = copy_user,},
     {.when = ANY, .dest = ST_USER, .act1 = copy_user,},
 };
 
-static const struct parser_state_transition A[] = {
-    {.when = 'A', .dest = ST_A_END, .act1 = next_state,},
+static const struct parser_state_transition P[] = {
+    {.when = 'P', .dest = ST_P_END, .act1 = next_state,},
     {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
 
-static const struct parser_state_transition A_END[] = {
-    {.when = '\0', .dest = ST_OIP, .act1 = next_state,},
+static const struct parser_state_transition P_END[] = {
+    {.when = '\0', .dest = ST_PROTOCOL, .act1 = next_state,},
     {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
 
-static const struct parser_state_transition OIP[] = {
-    {.when = '\0', .dest = ST_OPORT, .act1 = copy_oip,},
-    {.when = '0', .dest = ST_OIP, .act1 = copy_oip,},
-    {.when = '1', .dest = ST_OIP, .act1 = copy_oip,},
-    {.when = '2', .dest = ST_OIP, .act1 = copy_oip,},
-    {.when = '3', .dest = ST_OIP, .act1 = copy_oip,},
-    {.when = '4', .dest = ST_OIP, .act1 = copy_oip,},
-    {.when = '5', .dest = ST_OIP, .act1 = copy_oip,},
-    {.when = '6', .dest = ST_OIP, .act1 = copy_oip,},
-    {.when = '7', .dest = ST_OIP, .act1 = copy_oip,},
-    {.when = '8', .dest = ST_OIP, .act1 = copy_oip,},
-    {.when = '9', .dest = ST_OIP, .act1 = copy_oip,},
-    {.when = '.', .dest = ST_OIP, .act1 = copy_oip,},
-    {.when = ':', .dest = ST_OIP, .act1 = copy_oip,},
-    {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
-};
-
-static const struct parser_state_transition OPORT[] = {
-    {.when = '\0', .dest = ST_DESTINATION, .act1 = next_state,},
-    {.when = '0', .dest = ST_OPORT, .act1 = copy_oport,},
-    {.when = '1', .dest = ST_OPORT, .act1 = copy_oport,},
-    {.when = '2', .dest = ST_OPORT, .act1 = copy_oport,},
-    {.when = '3', .dest = ST_OPORT, .act1 = copy_oport,},
-    {.when = '4', .dest = ST_OPORT, .act1 = copy_oport,},
-    {.when = '5', .dest = ST_OPORT, .act1 = copy_oport,},
-    {.when = '6', .dest = ST_OPORT, .act1 = copy_oport,},
-    {.when = '7', .dest = ST_OPORT, .act1 = copy_oport,},
-    {.when = '8', .dest = ST_OPORT, .act1 = copy_oport,},
-    {.when = '9', .dest = ST_OPORT, .act1 = copy_oport,},
-    {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
+static const struct parser_state_transition PROTOCOL[] = {
+    {.when = '\0', .dest = ST_DESTINATION, .act1 = copy_protocol,},
+    {.when = ANY, .dest = ST_PROTOCOL, .act1 = copy_protocol,},
 };
 
 static const struct parser_state_transition DESTINATION[] = {
@@ -564,7 +537,7 @@ static const struct parser_state_transition DESTINATION[] = {
 };
 
 static const struct parser_state_transition DPORT[] = {
-    {.when = '\0', .dest = ST_STATUS, .act1 = next_state,},
+    {.when = '\0', .dest = ST_USERNAME, .act1 = next_state,},
     {.when = '0', .dest = ST_DPORT, .act1 = copy_dport,},
     {.when = '1', .dest = ST_DPORT, .act1 = copy_dport,},
     {.when = '2', .dest = ST_DPORT, .act1 = copy_dport,},
@@ -578,10 +551,14 @@ static const struct parser_state_transition DPORT[] = {
     {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
 
-static const struct parser_state_transition STATUS[] = {
-    {.when = 0, .dest = ST_END_ENTRY, .act1 = copy_status,},
-    {.when = 1, .dest = ST_END_ENTRY, .act1 = copy_status,},
-    {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
+static const struct parser_state_transition USERNAME[] = {
+    {.when = '\0', .dest = ST_PASSWORD, .act1 = copy_username,},
+    {.when = ANY, .dest = ST_USERNAME, .act1 = copy_username,},
+};
+
+static const struct parser_state_transition PASSWORD[] = {
+    {.when = '\0', .dest = ST_END_ENTRY, .act1 = copy_password,},
+    {.when = ANY, .dest = ST_PASSWORD, .act1 = copy_password,},
 };
 
 static const struct parser_state_transition END_ENTRY[] = {
@@ -635,13 +612,13 @@ static const struct parser_state_transition *states[] = {
     TIMEZONE_4,
     END_TIME,
     USER,
-    A,
-    A_END,
-    OIP,
-    OPORT,
+    P,
+    P_END,
+    PROTOCOL,
     DESTINATION,
     DPORT,
-    STATUS,
+    USERNAME,
+    PASSWORD,
     END_ENTRY,
     END,
     INVALID_INPUT_FORMAT,
@@ -687,13 +664,13 @@ static const size_t states_n[] = {
     N(TIMEZONE_4),
     N(END_TIME),
     N(USER),
-    N(A),
-    N(A_END),
-    N(OIP),
-    N(OPORT),
+    N(P),
+    N(P_END),
+    N(PROTOCOL),
     N(DESTINATION),
     N(DPORT),
-    N(STATUS),
+    N(USERNAME),
+    N(PASSWORD),
     N(END_ENTRY),
     N(END),
     N(INVALID_INPUT_FORMAT),
@@ -706,72 +683,63 @@ static struct parser_definition definition = {
         .start_state  = ST_YEAR_1,
 };
 
-struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
-    struct access_log * ans = calloc(1, sizeof(*ans));
+struct passwords * get_passwords_parser_init(){
+    struct passwords * ans = calloc(1, sizeof(*ans));
     struct parser *parser = parser_init(parser_no_classes(), &definition);
-    size_t current_time_length = 0;
-    size_t current_user_length = 0;
-    size_t current_oip_length = 0;
-    size_t current_destination_length = 0;
-    parser_error_t ans_error = NO_ERROR;
-    int finished = 0;
     ans->entries = resize_if_needed(ans->entries, sizeof(*ans->entries), ans->entry_qty);
     ans->entries[ans->entry_qty].time = NULL;
-    ans->entries[ans->entry_qty].user.user = NULL;
-    ans->entries[ans->entry_qty].origin_ip = NULL;
+    ans->entries[ans->entry_qty].user = NULL;
+    ans->entries[ans->entry_qty].protocol = NULL;
     ans->entries[ans->entry_qty].destination = NULL;
-    ans->entries[ans->entry_qty].origin_port = 0;
     ans->entries[ans->entry_qty].destination_port = 0;
+    ans->entries[ans->entry_qty].username = NULL;
+    ans->entries[ans->entry_qty].password = NULL;
+}
+
+struct passwords * get_passwords_parser_consume(uint8_t *s, size_t length, struct passwords * ans) {
+    parser_error_t ans_error = NO_ERROR;
     for (size_t i = 0; i<length; i++) {
-        const struct parser_event* ret = parser_feed(parser, s[i]);
+        const struct parser_event* ret = parser_feed(ans->parser, s[i]);
         switch (ret->type) {
             case COPY_TIME:
-                ans_error = add_to_string(&(ans->entries[ans->entry_qty].time), s[i], &current_time_length);
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].time), s[i], &(ans->current_time_length));
                 if(ans_error != NO_ERROR){
                     if(ans->entries[ans->entry_qty].time != NULL){
                         free(ans->entries[ans->entry_qty].time);
                     }
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
             case COPY_USER:
-                ans_error = add_to_string(&(ans->entries[ans->entry_qty].user.user), s[i], &current_user_length);
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].user), s[i], &(ans->current_user_length));
                 if(ans_error != NO_ERROR){
-                    if(ans->entries[ans->entry_qty].user.user != NULL){
+                    if(ans->entries[ans->entry_qty].user != NULL){
                         free(ans->entries[ans->entry_qty].time);
-                        free(ans->entries[ans->entry_qty].user.user);
+                        free(ans->entries[ans->entry_qty].user);
                     }
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
-            case COPY_OIP:
-                ans_error = add_to_string(&(ans->entries[ans->entry_qty].origin_ip), s[i], &current_oip_length);
+            case COPY_PROTOCOL:
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].protocol), s[i], &(ans->current_protocol_length));
                 if(ans_error != NO_ERROR){
-                    if(ans->entries[ans->entry_qty].origin_ip != NULL){
+                    if(ans->entries[ans->entry_qty].protocol != NULL){
                         free(ans->entries[ans->entry_qty].time);
-                        free(ans->entries[ans->entry_qty].user.user);
-                        free(ans->entries[ans->entry_qty].origin_ip);
+                        free(ans->entries[ans->entry_qty].user);
+                        free(ans->entries[ans->entry_qty].protocol);
                     }
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
-            break;
-            case COPY_OPORT:
-                ans->entries[ans->entry_qty].origin_port *= 10;
-                ans->entries[ans->entry_qty].origin_port += s[i] - '0';
             break;
             case COPY_DESTINATION:
-                ans_error = add_to_string(&(ans->entries[ans->entry_qty].destination), s[i], &current_destination_length);
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].destination), s[i], &(ans->current_destination_length));
                 if(ans_error != NO_ERROR){
                     if(ans->entries[ans->entry_qty].destination != NULL){
                         free(ans->entries[ans->entry_qty].time);
-                        free(ans->entries[ans->entry_qty].user.user);
-                        free(ans->entries[ans->entry_qty].origin_ip);
+                        free(ans->entries[ans->entry_qty].user);
+                        free(ans->entries[ans->entry_qty].protocol);
                         free(ans->entries[ans->entry_qty].destination);
                     }
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
@@ -779,73 +747,105 @@ struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
                 ans->entries[ans->entry_qty].destination_port *= 10;
                 ans->entries[ans->entry_qty].destination_port += s[i] - '0';
             break;
-            case COPY_STATUS:
-                ans->entries[ans->entry_qty].user.status = s[i];
+            case COPY_USERNAME:
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].username), s[i], &(ans->current_username_length));
+                if(ans_error != NO_ERROR){
+                    if(ans->entries[ans->entry_qty].username != NULL){
+                        free(ans->entries[ans->entry_qty].time);
+                        free(ans->entries[ans->entry_qty].user);
+                        free(ans->entries[ans->entry_qty].protocol);
+                        free(ans->entries[ans->entry_qty].destination);
+                        free(ans->entries[ans->entry_qty].username);
+                    }
+                    return error(ans, ans_error);
+                }
+            break;
+            case COPY_PASSWORD:
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].password), s[i], &(ans->current_password_length));
+                if(ans_error != NO_ERROR){
+                    if(ans->entries[ans->entry_qty].username != NULL){
+                        free(ans->entries[ans->entry_qty].time);
+                        free(ans->entries[ans->entry_qty].user);
+                        free(ans->entries[ans->entry_qty].protocol);
+                        free(ans->entries[ans->entry_qty].destination);
+                        free(ans->entries[ans->entry_qty].username);
+                        free(ans->entries[ans->entry_qty].password);
+                    }
+                    return error(ans, ans_error);
+                }
             break;
             case END_ENTRY_T:
-                current_time_length = 0;
-                current_user_length = 0;
-                current_oip_length = 0;
-                current_destination_length = 0;
+                ans->current_time_length = 0;
+                ans->current_user_length = 0;
+                ans->current_protocol_length = 0;
+                ans->current_destination_length = 0;
+                ans->current_username_length = 0;
+                ans->current_password_length = 0;
                 (ans->entry_qty)++;
                 ans->entries = resize_if_needed(ans->entries, sizeof(*ans->entries), ans->entry_qty);
                 ans->entries[ans->entry_qty].time = NULL;
-                ans->entries[ans->entry_qty].user.user = NULL;
-                ans->entries[ans->entry_qty].origin_ip = NULL;
+                ans->entries[ans->entry_qty].user = NULL;
+                ans->entries[ans->entry_qty].protocol = NULL;
                 ans->entries[ans->entry_qty].destination = NULL;
-                ans->entries[ans->entry_qty].origin_port = 0;
                 ans->entries[ans->entry_qty].destination_port = 0;
+                ans->entries[ans->entry_qty].username = NULL;
+                ans->entries[ans->entry_qty].password = NULL;
             break;
             case END_T:
                 ans->entries = realloc(ans->entries, sizeof(*(ans->entries)) * ans->entry_qty);
                 if(ans->entries == NULL){
-                    parser_destroy(parser);
                     return error(ans, REALLOC_ERROR);
                 }
-                finished = 1;
+                ans->finished = 1;
             break;
             case INVALID_INPUT_FORMAT_T:
                 if(ans->entries[ans->entry_qty].time != NULL){
                     free(ans->entries[ans->entry_qty].time);
-                    if(ans->entries[ans->entry_qty].user.user != NULL){
-                        free(ans->entries[ans->entry_qty].user.user);
-                        if(ans->entries[ans->entry_qty].origin_ip != NULL){
-                            free(ans->entries[ans->entry_qty].origin_ip);
+                    if(ans->entries[ans->entry_qty].user != NULL){
+                        free(ans->entries[ans->entry_qty].user);
+                        if(ans->entries[ans->entry_qty].protocol != NULL){
+                            free(ans->entries[ans->entry_qty].protocol);
                             if(ans->entries[ans->entry_qty].destination != NULL){
                                 free(ans->entries[ans->entry_qty].destination);
+                                if(ans->entries[ans->entry_qty].username != NULL){
+                                    free(ans->entries[ans->entry_qty].username);
+                                    if(ans->entries[ans->entry_qty].password != NULL){
+                                        free(ans->entries[ans->entry_qty].password);
+                                    }
+                                }
                             }
                         }
                     }
                 }
-                parser_destroy(parser);
                 return error(ans, INVALID_INPUT_FORMAT_ERROR);
         }
     }
-    if(!finished){
-        parser_destroy(parser);
-        return error(ans, INVALID_INPUT_FORMAT_ERROR);
-    }
-    parser_destroy(parser);
     return ans;
 }
 
-void free_access_log(struct access_log *access_log) {
-    if (access_log != NULL) {
-        if(access_log->entries != NULL){
-            for(int i = 0; i<access_log->entry_qty; i++){
-                free(access_log->entries[i].time);
-                free(access_log->entries[i].user.user);
-                free(access_log->entries[i].origin_ip);
-                free(access_log->entries[i].destination);
+void free_passwords(struct passwords *passwords) {
+    if (passwords != NULL) {
+        if(passwords->entries != NULL){
+            for(int i = 0; i<passwords->entry_qty; i++){
+                free(passwords->entries[i].time);
+                free(passwords->entries[i].user);
+                free(passwords->entries[i].protocol);
+                free(passwords->entries[i].destination);
+                free(passwords->entries[i].username);
+                free(passwords->entries[i].password);
             }
-            free(access_log->entries);
+            free(passwords->entries);
         }
-        free(access_log);
+        if(passwords->parser != NULL){
+            free(passwords->parser);
+            passwords->parser = NULL;
+        }
+        free(passwords);
     }
 }
 
-struct access_log *error(struct access_log *ans, parser_error_t error_type) {
-    free_access_log(ans);
+struct passwords *error(struct passwords *ans, parser_error_t error_type) {
+    free_passwords(ans);
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;
     return ans;
@@ -904,7 +904,7 @@ int main(int argc, char ** argv){
     buffer = realloc(buffer, i * sizeof(*buffer));
     fclose(fp);
 
-    struct access_log * ans = get_access_log_parser(buffer, i);
+    struct passwords * ans = get_passwords_parser(buffer, i);
     free(buffer);
     if(ans->error != NO_ERROR){
         printf("error\n");
@@ -913,15 +913,15 @@ int main(int argc, char ** argv){
         for(int i = 0; i<ans->entry_qty; i++){
             printf("\nEntry %d\n", i);
             printf("\tTime: %s\n",ans->entries[i].time);
-            printf("\tUser: %s\n",ans->entries[i].user.user);
-            printf("\tOrigin IP: %s\n",ans->entries[i].origin_ip);
-            printf("\tOrigin port: %d\n",ans->entries[i].origin_port);
+            printf("\tUser: %s\n",ans->entries[i].user);
+            printf("\tProtocol: %s\n",ans->entries[i].protocol);
             printf("\tDestination: %s\n",ans->entries[i].destination);
             printf("\tDestination port: %d\n",ans->entries[i].destination_port);
-            printf("\tStatus: %u\n",ans->entries[i].user.status);
+            printf("\tUsername: %s\n",ans->entries[i].username);
+            printf("\tPassword: %s\n",ans->entries[i].password);
         }
     }
-    free_access_log(ans);
+    free_passwords(ans);
     return 0;
 }
 */

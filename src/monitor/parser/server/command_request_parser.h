@@ -29,8 +29,13 @@ typedef enum {
 } user_mode;
 
 typedef enum {
+<<<<<<< HEAD:src/monitor_parser/server/command_request_parser.h
     IO_TIMEOUT = 1,
     LMODE = 2,
+=======
+    SYSTEM_LOG = 2,
+    SOCKS_LOG = 3
+>>>>>>> monitorParsersByChunks:src/monitor/parser/server/command_request_parser.h
 } var_code;
 
 

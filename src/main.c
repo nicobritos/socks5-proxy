@@ -22,6 +22,7 @@
 #include "args_helper.h"
 #include "utils/selector.h"
 #include "utils/log_helper.h"
+#include "monitor/MonitorServer.h"
 #include "socks5/socks5nio.h"
 #include "socks5/message/auth_user_pass_helper.h"
 #include "configuration.h"
@@ -54,26 +55,45 @@ main(const int argc, char **argv) {
     selector_status ss = SELECTOR_SUCCESS;
     fd_selector selector = NULL;
 
-    const int server = socket(configuration.socks5.sockaddr.ss_family, SOCK_STREAM, IPPROTO_TCP);
-    if (server < 0) {
-        err_msg = "Unable to create socket";
+    const int socks = socket(configuration.socks5.sockaddr.ss_family, SOCK_STREAM, IPPROTO_TCP);
+    const int monitor = socket(configuration.monitor.sockaddr.ss_family, SOCK_STREAM, IPPROTO_SCTP);
+    if (socks < 0) {
+        err_msg = "Unable to create socks' socket";
+        goto finally;
+    }
+    if (monitor < 0) {
+        err_msg = "Unable to create monitor's socket";
         goto finally;
     }
 
     // man 7 ip. no importa reportar nada si falla.
-    setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int) {1}, sizeof(int));
-    // Necesitamos desactivar esto para bindear a IPv4 e IPv6 al mismo tiempo
+    setsockopt(socks, SOL_SOCKET, SO_REUSEADDR, &(int) {1}, sizeof(int));
+    setsockopt(monitor, SOL_SOCKET, SO_REUSEADDR, &(int) {1}, sizeof(int));
+
     if (configuration.socks5.sockaddr.ss_family == AF_INET6) {
-        setsockopt(server, IPPROTO_IPV6, IPV6_V6ONLY, &(int) {0}, sizeof(int));
+        // Necesitamos desactivar esto para bindear a IPv4 e IPv6 al mismo tiempo
+        setsockopt(socks, IPPROTO_IPV6, IPV6_V6ONLY, &(int) {0}, sizeof(int));
+    }
+    if (configuration.monitor.sockaddr.ss_family == AF_INET6) {
+        // Necesitamos desactivar esto para bindear a IPv4 e IPv6 al mismo tiempo
+        setsockopt(socks, IPPROTO_IPV6, IPV6_V6ONLY, &(int) {0}, sizeof(int));
     }
 
-    if (bind(server, (struct sockaddr *) &configuration.socks5.sockaddr, sizeof(configuration.socks5.sockaddr)) < 0) {
-        err_msg = "unable to bind socket";
+    if (bind(socks, (struct sockaddr *) &configuration.socks5.sockaddr, sizeof(configuration.socks5.sockaddr)) < 0) {
+        err_msg = "unable to bind socks' socket";
+        goto finally;
+    }
+    if (bind(monitor, (struct sockaddr *) &configuration.monitor.sockaddr, sizeof(configuration.monitor.sockaddr)) < 0) {
+        err_msg = "unable to bind monitor's socket";
         goto finally;
     }
 
-    if (listen(server, 20) < 0) {
-        err_msg = "unable to listen";
+    if (listen(socks, 20) < 0) {
+        err_msg = "unable to listen socks";
+        goto finally;
+    }
+    if(listen(monitor, 20) < 0) {
+        err_msg = "unable to listen monitor";
         goto finally;
     }
 
@@ -84,7 +104,7 @@ main(const int argc, char **argv) {
     /** Algunos SOs ignoran el MSG_NOSIGNAL flag */
     signal(SIGPIPE, SIG_IGN);
 
-    if (selector_fd_set_nio(server) == -1) {
+    if (selector_fd_set_nio(socks) == -1) {
         err_msg = "getting server socket flags";
         goto finally;
     }
@@ -105,15 +125,25 @@ main(const int argc, char **argv) {
         err_msg = "unable to create selector";
         goto finally;
     }
+
     const struct fd_handler socksv5 = {
             .handle_read       = socks_passive_accept,
             .handle_write      = NULL,
             .handle_close      = NULL, // nada que liberar
     };
-    ss = selector_register(selector, server, &socksv5,
-                           OP_READ, NULL);
+    ss = selector_register(selector, socks, &socksv5,OP_READ, NULL);
     if (ss != SELECTOR_SUCCESS) {
-        err_msg = "registering fd";
+        err_msg = "registering socks' fd";
+        goto finally;
+    }
+    const struct fd_handler monitor_handler = {
+            .handle_read       = monitor_passive_accept,
+            .handle_write      = NULL,
+            .handle_close      = NULL, // nada que liberar
+    };
+    ss = selector_register(selector, monitor, &monitor_handler,OP_READ, NULL);
+    if (ss != SELECTOR_SUCCESS) {
+        err_msg = "registering monitor's fd";
         goto finally;
     }
 
@@ -174,12 +204,13 @@ main(const int argc, char **argv) {
     selector_close();
 
     socks_pool_destroy();
+    monitor_pool_destroy();
     if (system_log != NULL) {
         logger_close_system_log();
         system_log = NULL;
     }
 
     if (auth_status == auth_user_pass_helper_status_ok) auth_user_pass_helper_close();
-    if (server >= 0) close(server);
+    if (socks >= 0) close(socks);
     return ret;
 }
