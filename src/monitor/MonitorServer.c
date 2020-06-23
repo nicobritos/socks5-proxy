@@ -91,20 +91,13 @@ typedef struct monitor_t {
     union {
         struct {
             socks_access_log_node_t current_node;
-            uint8_t packet_index;
-            uint16_t str_index;
         } access_log;
         struct {
             sorted_hashmap_list_t list;
             sorted_hashmap_list_node_t current_node;
-            uint8_t packet_index;
-            uint16_t str_index;
         } users;
         struct {
-            sniffed_credentials_list list;
             sniffed_credentials_node current_node;
-            uint8_t packet_index;
-            uint16_t str_index;
         } passwords;
     } command_data;
 
@@ -388,33 +381,130 @@ static void read_close(unsigned state, struct selector_key *key) {
 
 static bool read_process(const monitor_t m) {
     switch (m->command->code) {
-        case GET_ACCESS_LOG:
         case GET_METRICS:
-            break;
-        case GET_PASSWORDS: {
-            if (m->command_data.users.current_node == NULL)
-                return READ;
+            if (m->sent)
+                return false;
 
-            m->command_data.passwords.list = sniffed_credentials_create_list();
-            if (m->command_data.passwords.list != NULL) {
-                m->command_data.passwords.current_node = sniffed_credentials_get_first(socks_get_sniffed_credentials_list());
+            size_t n;
+            uint8_t *buff = buffer_write_ptr(&m->write_buffer, &n);
+            if (n < 24) {
+                return false;
+            }
+            buffer_write_adv(&m->write_buffer, 24);
+
+            uint8_t i = 0;
+            uint8_t ib = 0;
+            while (i < sizeof(uint64_t)) {
+                buff[ib] = (socks_get_total_connections() >> ((sizeof(uint64_t) - i - 1) * 8)) & 0xFF;
+                i++;
+                ib++;
+            }
+            i = 0;
+            while (i < sizeof(uint64_t)) {
+                buff[ib] = (socks_get_current_connections() >> ((sizeof(uint64_t) - i - 1) * 8)) & 0xFF;
+                i++;
+                ib++;
+            }
+            i = 0;
+            while (i < sizeof(uint64_t)) {
+                buff[ib] = (socks_get_total_bytes_transferred() >> ((sizeof(uint64_t) - i - 1) * 8)) & 0xFF;
+                i++;
+                ib++;
+            }
+
+            m->sent = true;
+            return true;
+        case GET_ACCESS_LOG:
+            if (m->sent && m->command_data.access_log.current_node == NULL)
+                return false;
+
+            if (m->command_data.access_log.current_node == NULL) {
+                m->command_data.access_log.current_node = socks_get_first_access_log_node();
+                m->sent = true;
+            }
+            if (m->command_data.access_log.current_node != NULL) {
+                struct socks_access_log_details_t *details = socks_get_access_log(m->command_data.access_log.current_node);
+
+                socks_access_log_node_t next = socks_get_next_access_log_node(m->command_data.access_log.current_node);
+                size_t n, i;
+                char *b = buffer_write_ptr(&m->write_buffer, &n);
+
+                i = sprintf(b, "%s", details->datetime);
+                b[i++] = '\0';
+                i += sprintf(b, "%s", details->username);
+                b[i++] = '\0';
+                i += sprintf(b, "A");
+                b[i++] = '\0';
+                i += sprintf(b, "%s", details->origin.ip);
+                b[i++] = '\0';
+                i += sprintf(b, "%s", details->origin.port);
+                b[i++] = '\0';
+                i += sprintf(b, "%s", details->destination.name);
+                b[i++] = '\0';
+                i += sprintf(b, "%s", details->destination.port);
+                b[i++] = '\0';
+                i += sprintf(b, "%d", details->status);
+                b[i++] = '\0';
+                if (next == NULL)
+                    b[i++] = '\0';
+
+                buffer_write_adv(&m->write_buffer, i);
+
+                m->command_data.access_log.current_node = next;
+            }
+            return true;
+        case GET_PASSWORDS: {
+            if (m->sent && m->command_data.passwords.current_node == NULL)
+                return false;
+
+            if (m->command_data.passwords.current_node == NULL) {
+                m->command_data.passwords.current_node = sniffed_credentials_get_first(
+                        socks_get_sniffed_credentials_list());
+                m->sent = true;
+            }
+            if (m->command_data.passwords.current_node != NULL) {
                 struct sniffed_credentials *credentials = sniffed_credentials_get(m->command_data.passwords.current_node);
 
                 sniffed_credentials_node next = sniffed_credentials_get_next(m->command_data.passwords.current_node);
-                size_t n;
-                uint8_t *b = buffer_write_ptr(&m->write_buffer, &n);
-                uint16_t written = 0;
-                // Aca escribir la rta (NO HACER FREE DE LA LISTA)
+                size_t n, i;
+                char *b = buffer_write_ptr(&m->write_buffer, &n);
+
+                i = sprintf(b, "%s", credentials->datetime);
+                b[i++] = '\0';
+                i += sprintf(b, "%s", credentials->username);
+                b[i++] = '\0';
+                i += sprintf(b, "P");
+                b[i++] = '\0';
+                i += sprintf(b, "%s", credentials->protocol);
+                b[i++] = '\0';
+                i += sprintf(b, "%s", credentials->destination);
+                b[i++] = '\0';
+                i += sprintf(b, "%s", credentials->port);
+                b[i++] = '\0';
+                i += sprintf(b, "%s", credentials->logger_user);
+                b[i++] = '\0';
+                i += sprintf(b, "%s", credentials->password);
+                b[i++] = '\0';
+                b[i++] = '\0';
+                if (next == NULL)
+                    b[i++] = '\0';
+
+                buffer_write_adv(&m->write_buffer, i);
+
+                m->command_data.passwords.current_node = next;
             }
-            return WRITE;
+            return true;
         }
         case GET_USERS: {
-            if (m->command_data.users.current_node == NULL)
-                return READ;
+            if (m->sent && m->command_data.users.current_node == NULL)
+                return false;
 
-            m->command_data.users.list = auth_user_pass_get_values();
-            if (m->command_data.users.list != NULL) {
+            if (m->command_data.passwords.current_node == NULL) {
+                m->command_data.users.list = auth_user_pass_get_values();
                 m->command_data.users.current_node = sorted_hashmap_list_get_first(m->command_data.users.list);
+                m->sent = true;
+            }
+            if (m->command_data.users.list != NULL) {
                 struct auth_user_pass_credentials *credentials = sorted_hashmap_list_get_element(m->command_data.users.current_node);
 
                 sorted_hashmap_list_node_t next = sorted_hashmap_list_get_next_node(m->command_data.users.current_node);
@@ -431,11 +521,11 @@ static bool read_process(const monitor_t m) {
                     m->command_data.users.current_node = NULL;
                 }
             }
-            return WRITE;
+            return true;
         }
         case GET_VARS: {
             if (m->sent)
-                return READ;
+                return false;
 
             uint8_t log_n;
             log_t log;
@@ -453,19 +543,13 @@ static bool read_process(const monitor_t m) {
 
             populate_vars(&m->write_buffer, log_n, log);
             m->sent = true;
-            return WRITE;
+            return true;
         }
         case SET_USER:
-            break;
+            break; // TODO
         case SET_VAR:
             break;
     }
-
-
-    if (write_response(m->write_buffer, m) == -1) {
-        ret = ERROR;
-    }
-    return ret;
 }
 
 /** ---------------- READ ---------------- */
@@ -560,175 +644,40 @@ static char *password = "adminadmin";
 
 
 
-static bool authenticate_user(char *buffer) {
-    uint8_t userRec[MAX_BUFFER];
-    uint8_t passRec[MAX_BUFFER];
-
-    strcpy(userRec, buffer + 1);
-    strcpy(passRec, buffer + 2 + strlen(userRec));
-
-    if (strcmp(user, userRec) == 0) {
-        if (strcmp(password, passRec) == 0) {
-            logged = true;
-        }
-    }
-    return logged;
-}
-
-static void sign_in(char *buffer) {
-    uint8_t response[MAX_BUFFER];
-    char message[255];
-    bool userAuth = authenticate_user(buffer);
-    if (userAuth) {
-        printf("User:%s has signned in.\n", user);
-        response[0] = 0x01;
-        strcpy(message, "Welcome!");
-    } else {
-        printf("Failed authentication\n");
-        response[0] = 0x00;
-        strcpy(message, "Username Or Password Incorrect");
-    }
-
-    strcpy(response + 1, message);
-
-    int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t) * (strlen(message) + 2), NULL, 0, 0, 0,
-                           0, 0, 0);
-    if (ret == -1) {
-        printf("Error sending message\n");
-    }
-}
-
-static void get_metrics() {
-
-    /* RESPONSE
-    +------+------+-------+
-    | ECON | ACON | BYTES | 
-    +------+------+-------+
-    |   8  |   8  |   8   |  
-    +------+------+-------+
-    */
-
-    const int RESPONSE_MAX_LENGTH = 24;
-    uint8_t response[RESPONSE_MAX_LENGTH];
-
-    // uint64_t tc = socks_get_total_connections();
-    // uint64_t cc = socks_get_current_connections();
-    // uint64_t tbt = sockes_get_total_bytes_transferred();
-
-    // FALTA -> HACER LA CONVERSION DE uint64_t a uint8_t[8] Y AGREGARLOS AL RESPONSE;
-
-    int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t) * RESPONSE_MAX_LENGTH, NULL, 0, 0, 0,
-                           0, 0, 0);
-    if (ret == -1) {
-        printf("Error sending message\n");
-    }
-}
-
-static void get_users() {
-
-    /* RESPONSE
-    +------------+------------+
-    |    USER    |   STATUS   | 
-    +------------+------------+
-    |  Variable  |     1      |  
-    +------------+------------+
-    */
-
-    const int RESPONSE_MAX_LENGTH = 1024;
-    uint8_t response[RESPONSE_MAX_LENGTH];
-
-    sorted_hashmap_list_t aup = auth_user_pass_get_values();
-    if (aup != NULL) {
-        int length = 0;
-        sorted_hashmap_list_node_t node = sorted_hashmap_list_get_first(aup);
-        while (node != NULL) {
-            struct auth_user_pass_credentials *credentials = sorted_hashmap_list_get_element(node);
-            strcpy(response + length, credentials->username);
-            length += (credentials->username_length + 1);
-            response[length] = credentials->active;
-            length += 1;
-
-            node = sorted_hashmap_list_get_next_node(node);
-        }
-        response[length] = '\0';
-    }
-
-    sorted_hashmap_list_free(aup);
-
-    int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t) * RESPONSE_MAX_LENGTH, NULL, 0, 0, 0,
-                           0, 0, 0);
-    if (ret == -1) {
-        printf("Error sending message\n");
-    }
-
-}
-
-static void get_access_log() {
-
-    /* RESPONSE
-    +----------+----------+-------+----------+----------+----------+----------+----------+
-    |   TIME   |   USER   | RTYPE |   OIP    |  OPORT   |   DEST   |  DPORT   |  STATUS  |
-    +----------+----------+-------+----------+----------+----------+----------+----------+
-    | Variable | Variable |   1   | Variable | Variable | Variable | Variable |    1     |
-    +----------+----------+-------+----------+----------+----------+----------+----------+
-    */
-
-
-}
-
-static void get_passwords() {
-}
-
-static void parse_command(char *buffer) {
-    uint8_t code = buffer[0];
-    switch (code) {
-        case 0x01:
-            get_metrics();
-            break;
-        case 0x02:
-            printf("GET_USERS\n");
-            get_users();
-            break;
-        case 0x03:
-            printf("GET_ACCESS_LOG\n");
-            get_access_log();
-            break;
-        case 0x04:
-            printf("GET_PASSWORDS\n");
-            get_passwords();
-            break;
-        case 0x05:
-            printf("GET_VARS\n");
-            get_vars();
-            break;
-        case 0x06:
-            printf("SET_USER\n");
-            // set_user();
-            break;
-        case 0x07:
-            printf("SET_VAR\n");
-            // set_var();
-            break;
-        default:
-            break;
-    }
-}
-
-
-
-int main2(int argc, char *argv[]) {
-    while (1) {
-        int ret = receive_request();
-        if (ret > 0) {
-            if (!logged) {
-                sign_in(buffer);
-            } else {
-                parse_command(buffer);
-            }
-        } else {
-            close(connSock);
-        }
-    }
-    return 0;
-}
-
+//static bool authenticate_user(char *buffer) {
+//    uint8_t userRec[MAX_BUFFER];
+//    uint8_t passRec[MAX_BUFFER];
+//
+//    strcpy(userRec, buffer + 1);
+//    strcpy(passRec, buffer + 2 + strlen(userRec));
+//
+//    if (strcmp(user, userRec) == 0) {
+//        if (strcmp(password, passRec) == 0) {
+//            logged = true;
+//        }
+//    }
+//    return logged;
+//}
+//
+//static void sign_in(char *buffer) {
+//    uint8_t response[MAX_BUFFER];
+//    char message[255];
+//    bool userAuth = authenticate_user(buffer);
+//    if (userAuth) {
+//        printf("User:%s has signned in.\n", user);
+//        response[0] = 0x01;
+//        strcpy(message, "Welcome!");
+//    } else {
+//        printf("Failed authentication\n");
+//        response[0] = 0x00;
+//        strcpy(message, "Username Or Password Incorrect");
+//    }
+//
+//    strcpy(response + 1, message);
+//
+//    int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t) * (strlen(message) + 2), NULL, 0, 0, 0,
+//                           0, 0, 0);
+//    if (ret == -1) {
+//        printf("Error sending message\n");
+//    }
+//}
