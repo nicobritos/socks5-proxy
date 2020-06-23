@@ -16,7 +16,7 @@
  */
 #include <stdint.h>
 #include <stddef.h>
-#include "parser_errors.h"
+#include "../parser_errors.h"
 
 typedef struct {
     char * user;

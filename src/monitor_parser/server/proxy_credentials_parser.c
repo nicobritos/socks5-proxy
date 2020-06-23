@@ -13,7 +13,7 @@ struct proxy_credentials *add_char_to_username(struct proxy_credentials *ans, ch
 
 struct proxy_credentials *add_char_to_password(struct proxy_credentials *ans, char c, size_t *password_current_length);
 
-struct proxy_credentials *error(struct proxy_credentials *ans, proxy_credentials_parser_error_t error_type);
+struct proxy_credentials *error(struct proxy_credentials *ans, parser_error_t error_type);
 
 // definición de maquina
 
@@ -190,7 +190,7 @@ add_char_to_password(struct proxy_credentials *ans, char c, size_t *password_cur
     return ans;
 }
 
-struct proxy_credentials *error(struct proxy_credentials *ans, proxy_credentials_parser_error_t error_type) {
+struct proxy_credentials *error(struct proxy_credentials *ans, parser_error_t error_type) {
     proxy_credentials_free(ans);
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;

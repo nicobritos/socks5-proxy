@@ -51,7 +51,7 @@ Configure and Monitor for SOCKS V5 Server
                 +------+------+-------+
                 | ECON | ACON | BYTES | 
                 +------+------+-------+
-                |   4  |   4  |   4   |  
+                |   8  |   8  |   8   |  
                 +------+------+-------+
 
         o   ECON - number of established connections
@@ -170,12 +170,19 @@ Configure and Monitor for SOCKS V5 Server
 
         o   VCODE - Reference to Var
         		+ I/0 TIMEOUT - Code 0x01
-        		+ - Code 0x02
-        		+ - Code 0x03
-
-        		(faltan definir algunas variables mas)
+        		+ LMODE - Logging severity - Code 0x02
 
         o   VVALUE - Variable Value as string. It is null terminated
+                + I/0 TIMEOUT
+                + LMODE
+                    -> LOG_SEVERITY_DEBUG - 0x01
+                    -> LOG_SEVERITY_INFO - 0x02
+                    -> LOG_SEVERITY_WARNING - 0x03
+                    -> LOG_SEVERITY_ERROR - 0x04
+
+        Example
+        
+        '\14000\23' - Meaning I/0 TIMEOUT = 4000 and LMODE = 3
 
 
 	-SET USER - Code 0x06
@@ -186,7 +193,7 @@ Configure and Monitor for SOCKS V5 Server
            | CODE |   USER   |   PASS   | MODE |
            +------+----------+----------+------+
            |  1   | Variable | Variable |  1   |
-           +------+----------+------+----------+
+           +------+----------+----------+------+
 
         o   USER - user name (null terminated string)
         o   PASS - password (null terminated string)
@@ -207,11 +214,12 @@ Configure and Monitor for SOCKS V5 Server
            +------+-------+----------+
 
         o   VCODE - Reference to Var
-        		+ I/0 TIMEOUT - Code 0x01
+        	+ I/0 TIMEOUT - Code 0x01
             + LMODE - Logging severity - 0x02 
+
         o   VVALUE
         	+ I/0 TIMEOUTS is size_t big endian
-          + LMODE
+            + LMODE
               -> LOG_SEVERITY_DEBUG - 0x01
               -> LOG_SEVERITY_INFO - 0x02
               -> LOG_SEVERITY_WARNING - 0x03
