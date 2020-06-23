@@ -175,27 +175,23 @@ static void get_metrics(){
     +------+------+-------+
     */
 
-    const int RESPONSE_MAX_LENGTH = 12;
+    const int RESPONSE_MAX_LENGTH = 24;
     uint8_t response[RESPONSE_MAX_LENGTH];
 
-    // response[0] = 1000000;//socks_get_total_connections();
-    // response[1] = 2000000;//socks_get_current_connections();
-    // response[2] = 3000000;//sockes_get_total_bytes_transferred();
+    // uint64_t tc = socks_get_total_connections();
+    // uint64_t cc = socks_get_current_connections();
+    // uint64_t tbt = sockes_get_total_bytes_transferred();
 
-    uint32_t a = htonl(0x1020304);
-    uint32_t b = 0x1020304;
-    uint32_t c = 0x1020304;
-    uint8_t d = 0x67305985;
-
-    memcpy(response,&a,sizeof(a));
-    memcpy(response+4,&b,sizeof(b));
-    memcpy(response+8,&c,sizeof(c));
+    // FALTA -> HACER LA CONVERSION DE uint64_t a uint8_t[8] Y AGREGARLOS AL RESPONSE;
 
     int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t)*RESPONSE_MAX_LENGTH,NULL, 0, 0, 0, 0, 0, 0);
     if(ret == -1){
         printf("Error sending message\n");
     }
+}
 
+static void get_users(){
+    
 }
 
 static void parse_command(char *buffer){
@@ -206,7 +202,7 @@ static void parse_command(char *buffer){
             break;
         case 0x02:
             printf("GET_USERS\n");
-            // get_users();
+            get_users();
             break;
         case 0x03:
             printf("GET_ACCESS_LOG\n");
