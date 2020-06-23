@@ -11,10 +11,10 @@
 #include <stdint.h>
 #include <stddef.h>
 
-typedef enum errors{
-    NO_ERROR = 0,
-    REALLOC_ERROR,               // Si al hacer un realloc se produjo algun error
-}error_t;
+typedef enum pop3_sniffer_errors{
+    POP3_SNIFFER_NO_ERROR = 0,
+    POP3_SNIFFER_REALLOC_ERROR,               // Si al hacer un realloc se produjo algun error
+} pop3_sniffer_error_t;
 
 struct pop3_credentials {
     uint8_t finished;
@@ -22,11 +22,11 @@ struct pop3_credentials {
     char * password;
     size_t user_length;
     size_t password_length;
-    error_t error;
+    pop3_sniffer_error_t error;
 };
 
-/** Crea una estructura inicializada para la primera llamada de pop3_sniffer_consume **/
-struct pop3_credentials * pop3_credentials_init();
+/** Inicializa la estructura para la primera llamada de pop3_sniffer_consume **/
+void pop3_credentials_init(struct pop3_credentials * credentials);
 
 /** Inicializa el parser **/
 struct parser * pop3_sniffer_init();
@@ -55,7 +55,7 @@ void pop3_sniffer_destroy(struct parser * parser);
 
 /**
  * Libera la memoria utilizada por la estructura, si pop3_credentials es NULL, no hace nada
- */ 
+ */
 void free_pop3_credentials(struct pop3_credentials * pop3_credentials);
 
 

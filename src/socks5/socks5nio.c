@@ -16,18 +16,20 @@
 
 #include "../utils/stm.h"
 #include "socks5nio.h"
-#include "../utils/log_helper.h"
 #include "../utils/byte_formatter.h"
 #include "../doh/doh.h"
-#include "../doh/doh_response_parser.h"
 #include "../configuration.h"
-#include "sniffer/sniffed_credentials.h"
+#include "sniffer/http_sniffer.h"
+#include "sniffer/pop3_sniffer.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 #define MIN(x, y) (x < y ? x : y)
 /** obtiene el struct (socks5 *) desde la llave de selección  */
 #define ATTACHMENT(key) ( (struct socks5 *)(key)->data)
 #define SOCKS_LOG_FILENAME "socks.log"
+#define HTTP_PROTOCOL "HTTP"
+#define POP3_PROTOCOL "POP3"
+
 
 /** maquina de estados general */
 enum socks_v5state {
@@ -255,6 +257,16 @@ struct socks5 {
     } client;
 
     struct request_st client_request;
+    struct {
+        struct {
+            struct pop3_credentials credentials;
+            struct parser *parser;
+        } pop3_data;
+
+        struct http_credentials http_credentials;
+
+        bool done;
+    } client_sniffers;
 
     /** estados para el server_fd */
     union {
@@ -1509,10 +1521,26 @@ static void copy_init(const unsigned state, struct selector_key *key) {
     d->write_buffer = &ATTACHMENT(key)->read_buffer;
     d->duplex = OP_READ | OP_WRITE;
     d->other = &ATTACHMENT(key)->client.copy;
+
+    if (configuration.socks5.sniffers_enabled) {
+        pop3_credentials_init(&ATTACHMENT(key)->client_sniffers.pop3_data.credentials);
+        ATTACHMENT(key)->client_sniffers.pop3_data.parser = pop3_sniffer_init();
+        if (ATTACHMENT(key)->client_sniffers.pop3_data.parser == NULL && logger != NULL) {
+            logger_append_to_log(
+                    logger,
+                    log_severity_error,
+                    "No se pudo crear el parser del sniffer pop3",
+                    0);
+        }
+    } else {
+        ATTACHMENT(key)->client_sniffers.done = true;
+    }
 }
 
 /** lee bytes de un socket y los encola para ser escritos en otro */
 static unsigned copy_read(struct selector_key *key) {
+    struct socks5 *s = ATTACHMENT(key);
+
     struct copy *d = copy_ptr(key);
 
     assert(*d->fd == key->fd);
@@ -1530,6 +1558,69 @@ static unsigned copy_read(struct selector_key *key) {
             d->other->duplex &= ~OP_WRITE;
         }
     } else {
+        /** Esto quiere decir que estamos leyendo una request */
+        if (*d->fd == s->client_fd && !s->client_sniffers.done) {
+            /** El parser del http termina ante input invalido, el del pop3 no */
+            http_sniffer_consume(ptr, n, &s->client_sniffers.http_credentials);
+            if (s->client_sniffers.http_credentials.finished) {
+                s->client_sniffers.done = true;
+
+                struct sniffed_credentials *credentials = malloc(sizeof(*credentials));
+                if (credentials != NULL) {
+                    credentials->datetime = logger_get_datetime();
+                    if (credentials->datetime == NULL)
+                        goto cont;
+
+                    uint32_t len = strlen(s->client_sniffers.http_credentials.user);
+                    credentials->username = malloc(sizeof(*credentials->username) * (len + 1));
+                    if (credentials->username == NULL) {
+                        free(credentials->datetime);
+                        free(credentials);
+                        goto cont;
+                    }
+                    memcpy(credentials->username, s->client_sniffers.http_credentials.user, len + 1);
+
+                    len = strlen(s->client_sniffers.http_credentials.password);
+                    credentials->password = malloc(sizeof(*credentials->password) * (len + 1));
+                    if (credentials->password == NULL) {
+                        free(credentials->datetime);
+                        free(credentials->username);
+                        free(credentials);
+                        goto cont;
+                    }
+                    memcpy(credentials->password, s->client_sniffers.http_credentials.password, len + 1);
+
+                    credentials->logger_user = malloc(sizeof(*credentials->logger_user) * (s->credentials.username_length + 1));
+                    if (credentials->logger_user == NULL) {
+                        free(credentials->datetime);
+                        free(credentials->username);
+                        free(credentials->password);
+                        free(credentials);
+                        goto cont;
+                    }
+                    memcpy(credentials->logger_user, s->credentials.username, s->credentials.username_length + 1);
+
+                    uint16_t p;
+                    extract_ip_port_(&s->client_addr, credentials->destination, &p);
+
+                    if (s->client_addr.ss_family == AF_INET) {
+                        snprintf(credentials->port, PORT_DIGITS + 1, "%d", ((struct sockaddr_in*)&s->client_addr)->sin_port);
+                    } else {
+                        snprintf(credentials->port, PORT_DIGITS + 1, "%d", ((struct sockaddr_in6*)&s->client_addr)->sin6_port);
+                    }
+
+                    credentials->protocol = HTTP_PROTOCOL;
+
+                    sniffed_credentials_add(sniffed_credentials_l, credentials);
+                }
+                cont:;
+            } else if (s->client_sniffers.http_credentials.error != HTTP_SNIFFER_NO_ERROR &&
+                       s->client_sniffers.http_credentials.error != HTTP_SNIFFER_REALLOC_ERROR) {
+
+                // TODO: POP3
+            }
+        }
+
         buffer_write_adv(d->read_buffer, n);
     }
 

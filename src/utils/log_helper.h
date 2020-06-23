@@ -71,4 +71,11 @@ void logger_close_log(log_t log);
  */
 void logger_close_system_log();
 
+/**
+ * Retorna la representacion del current datetime
+ * en un string con formato ISO 8601. El mismo debe
+ * luego ser liberado
+ */
+char *logger_get_datetime();
+
 #endif //PC_2020A_6_TPE_SOCKSV5_LOG_HELPER_H
