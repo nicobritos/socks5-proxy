@@ -51,7 +51,7 @@ Configure and Monitor for SOCKS V5 Server
                 +------+------+-------+
                 | ECON | ACON | BYTES | 
                 +------+------+-------+
-                |   4  |   4  |   4   |  
+                |   8  |   8  |   8   |  
                 +------+------+-------+
 
         o   ECON - number of established connections

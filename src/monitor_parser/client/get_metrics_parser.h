@@ -15,9 +15,9 @@
 #include "../parser_errors.h"
 
 struct metrics {
-    uint32_t established_cons;
-    uint32_t actual_cons;
-    uint32_t bytes_transferred;
+    uint64_t established_cons;
+    uint64_t actual_cons;
+    uint64_t bytes_transferred;
     parser_error_t error;
 };
 

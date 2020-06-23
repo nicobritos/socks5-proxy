@@ -18,14 +18,26 @@ enum states {
     ST_ECON_2,
     ST_ECON_3,
     ST_ECON_4,
+    ST_ECON_5,
+    ST_ECON_6,
+    ST_ECON_7,
+    ST_ECON_8,
     ST_ACON_1,
     ST_ACON_2,
     ST_ACON_3,
     ST_ACON_4,
+    ST_ACON_5,
+    ST_ACON_6,
+    ST_ACON_7,
+    ST_ACON_8,
     ST_BYTES_1,
     ST_BYTES_2,
     ST_BYTES_3,
     ST_BYTES_4,
+    ST_BYTES_5,
+    ST_BYTES_6,
+    ST_BYTES_7,
+    ST_BYTES_8,
     ST_END,
     ST_INVALID_INPUT_FORMAT,
 };
@@ -94,6 +106,18 @@ static const struct parser_state_transition ECON_3[] = {
 };
 
 static const struct parser_state_transition ECON_4[] = {
+    {.when = ANY, .dest = ST_ECON_5, .act1 = copy_econ,},
+};
+static const struct parser_state_transition ECON_5[] = {
+    {.when = ANY, .dest = ST_ECON_6, .act1 = copy_econ,},
+};
+static const struct parser_state_transition ECON_6[] = {
+    {.when = ANY, .dest = ST_ECON_7, .act1 = copy_econ,},
+};
+static const struct parser_state_transition ECON_7[] = {
+    {.when = ANY, .dest = ST_ECON_8, .act1 = copy_econ,},
+};
+static const struct parser_state_transition ECON_8[] = {
     {.when = ANY, .dest = ST_ACON_1, .act1 = copy_econ,},
 };
 
@@ -110,6 +134,22 @@ static const struct parser_state_transition ACON_3[] = {
 };
 
 static const struct parser_state_transition ACON_4[] = {
+    {.when = ANY, .dest = ST_ACON_5, .act1 = copy_acon,},
+};
+
+static const struct parser_state_transition ACON_5[] = {
+    {.when = ANY, .dest = ST_ACON_6, .act1 = copy_acon,},
+};
+
+static const struct parser_state_transition ACON_6[] = {
+    {.when = ANY, .dest = ST_ACON_7, .act1 = copy_acon,},
+};
+
+static const struct parser_state_transition ACON_7[] = {
+    {.when = ANY, .dest = ST_ACON_8, .act1 = copy_acon,},
+};
+
+static const struct parser_state_transition ACON_8[] = {
     {.when = ANY, .dest = ST_BYTES_1, .act1 = copy_acon,},
 };
 
@@ -126,6 +166,22 @@ static const struct parser_state_transition BYTES_3[] = {
 };
 
 static const struct parser_state_transition BYTES_4[] = {
+    {.when = ANY, .dest = ST_BYTES_5, .act1 = copy_bytes,},
+};
+
+static const struct parser_state_transition BYTES_5[] = {
+    {.when = ANY, .dest = ST_BYTES_6, .act1 = copy_bytes,},
+};
+
+static const struct parser_state_transition BYTES_6[] = {
+    {.when = ANY, .dest = ST_BYTES_7, .act1 = copy_bytes,},
+};
+
+static const struct parser_state_transition BYTES_7[] = {
+    {.when = ANY, .dest = ST_BYTES_8, .act1 = copy_bytes,},
+};
+
+static const struct parser_state_transition BYTES_8[] = {
     {.when = ANY, .dest = ST_END, .act1 = end,},
 };
 
@@ -142,14 +198,26 @@ static const struct parser_state_transition *states[] = {
     ECON_2,
     ECON_3,
     ECON_4,
+    ECON_5,
+    ECON_6,
+    ECON_7,
+    ECON_8,
     ACON_1,
     ACON_2,
     ACON_3,
     ACON_4,
+    ACON_5,
+    ACON_6,
+    ACON_7,
+    ACON_8,
     BYTES_1,
     BYTES_2,
     BYTES_3,
     BYTES_4,
+    BYTES_5,
+    BYTES_6,
+    BYTES_7,
+    BYTES_8,
     END,
     INVALID_INPUT_FORMAT,
 };
@@ -161,14 +229,26 @@ static const size_t states_n[] = {
     N(ECON_2),
     N(ECON_3),
     N(ECON_4),
+    N(ECON_5),
+    N(ECON_6),
+    N(ECON_7),
+    N(ECON_8),
     N(ACON_1),
     N(ACON_2),
     N(ACON_3),
     N(ACON_4),
+    N(ACON_5),
+    N(ACON_6),
+    N(ACON_7),
+    N(ACON_8),
     N(BYTES_1),
     N(BYTES_2),
     N(BYTES_3),
     N(BYTES_4),
+    N(BYTES_5),
+    N(BYTES_6),
+    N(BYTES_7),
+    N(BYTES_8),
     N(END),
     N(INVALID_INPUT_FORMAT),
 };
