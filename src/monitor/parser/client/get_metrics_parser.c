@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../../utils/parser.h"
+#include "../../../utils/parser.h"
 #include "get_metrics_parser.h"
 
 #define CHUNK_SIZE 10

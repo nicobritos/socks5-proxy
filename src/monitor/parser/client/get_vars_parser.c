@@ -1,31 +1,31 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../../utils/parser.h"
-#include "auth_server_response_parser.h"
+#include "../../../utils/parser.h"
+#include "get_vars_parser.h"
 
 #define CHUNK_SIZE 10
 
 /* Funciones auxiliares */
-static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
+void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
 
-static struct auth_response *add_char_to_message(struct auth_response *ans, char c, size_t *message_current_length);
-
-static struct auth_response *error(struct auth_response *ans, parser_error_t error_type);
+struct vars *error(struct vars *ans, parser_error_t error_type);
 
 // definición de maquina
 
 enum states {
-    ST_STATUS,
-    ST_MESSAGE,
+    ST_VCODE,
+    ST_IO_TIMEOUT_VALUE,
+    ST_LMODE_VALUE,
+    ST_LMODE_END,
     ST_END,
     ST_INVALID_INPUT_FORMAT,
 };
 
 enum event_type {
     SUCCESS,
-    COPY_STATUS,
-    COPY_MESSAGE,
+    COPY_IO_TIMEOUT,
+    COPY_LMODE,
     END_T,
     INVALID_INPUT_FORMAT_T,
 };
@@ -38,15 +38,15 @@ next_state(struct parser_event *ret, const uint8_t c) {
 }
 
 static void
-copy_status(struct parser_event *ret, const uint8_t c) {
-    ret->type = COPY_STATUS;
+copy_io_timeout(struct parser_event *ret, const uint8_t c) {
+    ret->type = COPY_IO_TIMEOUT;
     ret->n = 1;
     ret->data[0] = c;
 }
 
 static void
-copy_message(struct parser_event *ret, const uint8_t c) {
-    ret->type = COPY_MESSAGE;
+copy_lmode(struct parser_event *ret, const uint8_t c) {
+    ret->type = COPY_LMODE;
     ret->n = 1;
     ret->data[0] = c;
 }
@@ -65,13 +65,40 @@ invalid_input(struct parser_event *ret, const uint8_t c) {
     ret->data[0] = c;
 }
 
-static const struct parser_state_transition STATUS[] = {
-    {.when = ANY, .dest = ST_MESSAGE, .act1 = copy_status,},
+static const struct parser_state_transition VCODE[] = {
+    {.when = '\0', .dest = ST_END, .act1 = end,},
+    {.when = '\1', .dest = ST_IO_TIMEOUT_VALUE, .act1 = next_state,},
+    {.when = '\2', .dest = ST_LMODE_VALUE, .act1 = next_state,},
+    {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
 
-static const struct parser_state_transition MESSAGE[] = {
-    {.when = '\0', .dest = ST_END, .act1 = end,},
-    {.when = ANY, .dest = ST_MESSAGE, .act1 = copy_message,},
+static const struct parser_state_transition IO_TIMEOUT_VALUE[] = {
+    {.when = '\0', .dest = ST_VCODE, .act1 = next_state,},
+    {.when = '0', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
+    {.when = '1', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
+    {.when = '2', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
+    {.when = '3', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
+    {.when = '4', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
+    {.when = '5', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
+    {.when = '6', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
+    {.when = '7', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
+    {.when = '8', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
+    {.when = '9', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
+    {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
+};
+
+static const struct parser_state_transition LMODE_VALUE[] = {
+    {.when = '\0', .dest = ST_VCODE, .act1 = next_state,},
+    {.when = '1', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+    {.when = '2', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+    {.when = '3', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+    {.when = '4', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+    {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
+};
+
+static const struct parser_state_transition LMODE_END[] = {
+    {.when = '\0', .dest = ST_VCODE, .act1 = next_state,},
+    {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
 
 static const struct parser_state_transition END[] = {
@@ -83,8 +110,10 @@ static const struct parser_state_transition INVALID_INPUT_FORMAT[] = {
 };
 
 static const struct parser_state_transition *states[] = {
-    STATUS,
-    MESSAGE,
+    VCODE,
+    IO_TIMEOUT_VALUE,
+    LMODE_VALUE,
+    LMODE_END,
     END,
     INVALID_INPUT_FORMAT,
 };
@@ -92,8 +121,10 @@ static const struct parser_state_transition *states[] = {
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
 static const size_t states_n[] = {
-    N(STATUS),
-    N(MESSAGE),
+    N(VCODE),
+    N(IO_TIMEOUT_VALUE),
+    N(LMODE_VALUE),
+    N(LMODE_END),
     N(END),
     N(INVALID_INPUT_FORMAT),
 };
@@ -102,25 +133,25 @@ static struct parser_definition definition = {
         .states_count = N(states),
         .states       = states,
         .states_n     = states_n,
-        .start_state  = ST_STATUS,
+        .start_state  = ST_VCODE,
 };
 
-struct auth_response * auth_response_parser(uint8_t *s, size_t length) {
-    struct auth_response * ans = calloc(1, sizeof(*ans));
+struct vars * get_vars_parser(uint8_t *s, size_t length) {
+    struct vars * ans = calloc(1, sizeof(*ans));
     struct parser *parser = parser_init(parser_no_classes(), &definition);
     size_t message_length = 0;
     int finished = 0;
     for (size_t i = 0; i<length; i++) {
         const struct parser_event* ret = parser_feed(parser, s[i]);
         switch (ret->type) {
-            case COPY_STATUS:
-                ans->status = s[i];
+            case COPY_IO_TIMEOUT:
+                ans->io_timeout *= 10;
+                ans->io_timeout += s[i] - '0';
             break;
-            case COPY_MESSAGE:
-                add_char_to_message(ans, s[i], &message_length);
+            case COPY_LMODE:
+                ans->lmode += s[i] - '0';
             break;
             case END_T:
-                add_char_to_message(ans, '\0', &message_length);
                 finished = 1;
             break;
             case INVALID_INPUT_FORMAT_T:
@@ -136,33 +167,20 @@ struct auth_response * auth_response_parser(uint8_t *s, size_t length) {
     return ans;
 }
 
-void auth_response_free(struct auth_response *auth_response) {
-    if (auth_response != NULL) {
-        if (auth_response->message != NULL) {
-            free(auth_response->message);
-        }
-        free(auth_response);
+void free_vars(struct vars *vars) {
+    if (vars != NULL) {
+        free(vars);
     }
 }
 
-static struct auth_response *
-add_char_to_message(struct auth_response *ans, char c, size_t *message_current_length) {
-    ans->message = resize_if_needed(ans->message, sizeof(*(ans->message)), *message_current_length);
-    if (ans->message == NULL) {
-        return error(ans, REALLOC_ERROR);
-    }
-    ans->message[(*message_current_length)++] = c;
-    return ans;
-}
-
-static struct auth_response *error(struct auth_response *ans, parser_error_t error_type) {
-    auth_response_free(ans);
+struct vars *error(struct vars *ans, parser_error_t error_type) {
+    free_vars(ans);
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;
     return ans;
 }
 
-static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
+void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
     if (current_length % CHUNK_SIZE == 0) {
         return realloc(ptr, ptr_size * (current_length + CHUNK_SIZE));
     }
@@ -177,7 +195,7 @@ static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length)
  *     4. Run in the terminal "afl-fuzz -i parser_test_case -o afl-output -- ./auth_server_response_parser @@"
  */
 
-/*
+
 int main(int argc, char ** argv){
     FILE * fp;
     int16_t c;
@@ -205,15 +223,14 @@ int main(int argc, char ** argv){
     buffer = realloc(buffer, i * sizeof(*buffer));
     fclose(fp);
 
-    struct auth_response * ans = auth_response_parser(buffer, i);
+    struct vars * ans = get_vars_parser(buffer, i);
     free(buffer);
-    if(ans->error != 0){
+    if(ans->error != NO_ERROR){
         printf("error\n");
     } else {
-        printf("%u\n", ans->status);
-        printf("%s\n", ans->message);
+        printf("IO Timeout = %zu\n", ans->io_timeout);
+        printf("Logger Severity = %u\n", ans->lmode);
     }
-    auth_response_free(ans);
+    free_vars(ans);
     return 0;
 }
-*/

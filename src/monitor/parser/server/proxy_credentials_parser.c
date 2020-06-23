@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../../utils/parser.h"
+#include "../../../utils/parser.h"
 #include "proxy_credentials_parser.h"
 
 #define CHUNK_SIZE 10
