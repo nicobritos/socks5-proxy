@@ -20,6 +20,7 @@
 
 #include "MonitorServer.h"
 #include "parser/server/command_request_parser.h"
+#include "../socks5/socks5nio.h"
 #include "../socks5/sniffer/sniffed_credentials.h"
 #include "../socks5/message/auth_user_pass_helper.h"
 #include "../utils/log_helper.h"
@@ -33,7 +34,10 @@
 #define ATTACHMENT(key) ( (struct monitor_t *)(key)->data)
 #define VAR_SYSTEM_LOG 0x02
 #define VAR_SOCKS_LOG 0x03
-
+#define LOG_SEVERITY_ERROR 4
+#define LOG_SEVERITY_WARNING 3
+#define LOG_SEVERITY_INFO 2
+#define LOG_SEVERITY_DEBUG 1
 
 /** maquina de estados general */
 enum monitor_state {
@@ -78,10 +82,31 @@ typedef struct monitor_t {
     struct sctp_sndrcvinfo sndrcvinfo;
     int fd;
     bool logged;
+    bool sent;
 
     /** maquinas de estados */
     struct state_machine stm;
     struct command *command;
+
+    union {
+        struct {
+            socks_access_log_node_t current_node;
+            uint8_t packet_index;
+            uint16_t str_index;
+        } access_log;
+        struct {
+            sorted_hashmap_list_t list;
+            sorted_hashmap_list_node_t current_node;
+            uint8_t packet_index;
+            uint16_t str_index;
+        } users;
+        struct {
+            sniffed_credentials_list list;
+            sniffed_credentials_node current_node;
+            uint8_t packet_index;
+            uint16_t str_index;
+        } passwords;
+    } command_data;
 
     /** buffers para ser usados read_buffer, write_buffer */
     uint8_t raw_buff_a[8*1024], raw_buff_b[8 * 1024];
@@ -131,7 +156,7 @@ static const struct fd_handler monitor_handler = {
 static void read_init(unsigned state, struct selector_key *key);
 static unsigned read_do(struct selector_key *key);
 static void read_close(unsigned state, struct selector_key *key);
-static unsigned read_process(const monitor_t m);
+static bool read_process(const monitor_t m);
 static void write_response(const monitor_t m);
 
 /** ---------------- WRITE ---------------- */
@@ -140,13 +165,11 @@ static unsigned write_do(struct selector_key *key);
 static void write_close(unsigned state, struct selector_key *key);
 
 /** ---------------- AUX ---------------- */
+static bool write_data(monitor_t m);
+
 static bool authenticate_user(char *buffer);
 static void sign_in(char *buffer);
-static void populate_metrics(monitor_t m);
-static void populate_users(monitor_t m);
-static void populate_access_log(monitor_t m);
-static void populate_passwords(monitor_t m);
-static void populate_vars(monitor_t m);
+static void populate_vars(buffer *b, uint8_t logger_n, log_t logger);
 
 /** ---------------- MONITOR HANDLERS ---------------- */
 static const struct state_definition client_statbl[] = {
@@ -323,6 +346,7 @@ static void close_fd_(int fd, struct selector_key* key) {
 /** ---------------- READ ---------------- */
 static void read_init(unsigned state, struct selector_key *key) {
 //    parser_init(&d->parser);
+    ATTACHMENT(key)->sent = false;
 }
 
 static unsigned read_do(struct selector_key *key) {
@@ -337,13 +361,16 @@ static unsigned read_do(struct selector_key *key) {
     n = sctp_recvmsg(key->fd, ptr, count, (struct sockaddr *) NULL, 0, &m->sndrcvinfo, 0);
     if (n > 0) {
         buffer_write_adv(&m->read_buffer, n);
-        m->command = command_request_parser(ptr, n);
+        if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
+            m->command = command_request_parser(ptr, n);
+            ret = WRITE;
+        } else {
+            ret = ERROR;
+        }
         // TODO: Chunks y chequear errores
-        return WRITE;
 //        parser_consume(d->read_buffer, &d->parser, &error);
 //        if (hello_is_done(st, NULL)) {
 //            if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
-//                ret = read_process(d);
 //            } else {
 //                ret = ERROR;
 //            }
@@ -359,21 +386,75 @@ static void read_close(unsigned state, struct selector_key *key) {
 
 }
 
-static unsigned read_process(const monitor_t m) {
-    unsigned ret = WRITE;
-
+static bool read_process(const monitor_t m) {
     switch (m->command->code) {
         case GET_ACCESS_LOG:
-
-            break;
         case GET_METRICS:
             break;
-        case GET_PASSWORDS:
-            break;
-        case GET_USERS:
-            break;
-        case GET_VARS:
-            break;
+        case GET_PASSWORDS: {
+            if (m->command_data.users.current_node == NULL)
+                return READ;
+
+            m->command_data.passwords.list = sniffed_credentials_create_list();
+            if (m->command_data.passwords.list != NULL) {
+                m->command_data.passwords.current_node = sniffed_credentials_get_first(socks_get_sniffed_credentials_list());
+                struct sniffed_credentials *credentials = sniffed_credentials_get(m->command_data.passwords.current_node);
+
+                sniffed_credentials_node next = sniffed_credentials_get_next(m->command_data.passwords.current_node);
+                size_t n;
+                uint8_t *b = buffer_write_ptr(&m->write_buffer, &n);
+                uint16_t written = 0;
+                // Aca escribir la rta (NO HACER FREE DE LA LISTA)
+            }
+            return WRITE;
+        }
+        case GET_USERS: {
+            if (m->command_data.users.current_node == NULL)
+                return READ;
+
+            m->command_data.users.list = auth_user_pass_get_values();
+            if (m->command_data.users.list != NULL) {
+                m->command_data.users.current_node = sorted_hashmap_list_get_first(m->command_data.users.list);
+                struct auth_user_pass_credentials *credentials = sorted_hashmap_list_get_element(m->command_data.users.current_node);
+
+                sorted_hashmap_list_node_t next = sorted_hashmap_list_get_next_node(m->command_data.users.current_node);
+                size_t n;
+                uint8_t *b = buffer_write_ptr(&m->write_buffer, &n);
+                buffer_write_adv(&m->write_buffer, credentials->username_length + (next != NULL ? 2 : 3));
+
+                memcpy(b, credentials->username, credentials->username_length + 1);
+                b[credentials->username_length + 1] = credentials->active ? 1 : 0;
+                if (next == NULL) {
+                    b[credentials->username_length + 2] = '\0';
+                    sorted_hashmap_list_free(m->command_data.users.list);
+                    m->command_data.users.list = NULL;
+                    m->command_data.users.current_node = NULL;
+                }
+            }
+            return WRITE;
+        }
+        case GET_VARS: {
+            if (m->sent)
+                return READ;
+
+            uint8_t log_n;
+            log_t log;
+
+            switch (m->command->var) {
+                case SYSTEM_LOG:
+                    log = logger_get_system_log();
+                    log_n = VAR_SYSTEM_LOG;
+                    break;
+                case SOCKS_LOG:
+                    log = socks_get_log();
+                    log_n = VAR_SOCKS_LOG;
+                    break;
+            }
+
+            populate_vars(&m->write_buffer, log_n, log);
+            m->sent = true;
+            return WRITE;
+        }
         case SET_USER:
             break;
         case SET_VAR:
@@ -406,7 +487,7 @@ static unsigned write_do(struct selector_key *key) {
     } else {
         buffer_read_adv(&m->write_buffer, n);
         if (!buffer_can_read(&m->write_buffer)) {
-            if (write_data(m)) {
+            if (read_process(m)) {
                 ret = WRITE;
             } else {
                 if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
@@ -435,22 +516,6 @@ static void sign_in(char *buffer) {
 
 }
 
-static void populate_metrics(monitor_t m) {
-
-}
-
-static void populate_users(monitor_t m) {
-
-}
-
-static void populate_access_log(monitor_t m) {
-
-}
-
-static void populate_passwords(monitor_t m) {
-
-}
-
 static void populate_vars(buffer *b, uint8_t logger_n, log_t logger) {
     /*
     +-------+----------+
@@ -462,27 +527,29 @@ static void populate_vars(buffer *b, uint8_t logger_n, log_t logger) {
 
     size_t n;
     uint8_t *buff = buffer_write_ptr(b, &n);
-    if (n < 2) {
+    if (n < 3) {
         return;
     }
     buff[0] = logger_n;
-    buff[1] = logger_get_log_severity();
-    buffer_write_adv(b, 2);
-    return 2;
+    buffer_write_adv(b, 3);
 
-    log_t log = logger_get_system_log();
-
-    if (log != NULL) {
-        response[0] = ;
-        enum log_severity log_sev = logger_get_log_severity(log);
-        response[1] = log_sev;
+    buff[0] = logger_n;
+    enum log_severity log_sev = logger_get_log_severity(logger);
+    switch (log_sev) {
+        case log_severity_error:
+            buff[1] = LOG_SEVERITY_ERROR + '0';
+            break;
+        case log_severity_warning:
+            buff[1] = LOG_SEVERITY_WARNING + '0';
+            break;
+        case log_severity_debug:
+            buff[1] = LOG_SEVERITY_DEBUG + '0';
+            break;
+        case log_severity_info:
+            buff[1] = LOG_SEVERITY_INFO + '0';
+            break;
     }
-
-    int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t) * RESPONSE_MAX_LENGTH, NULL, 0, 0, 0,
-                           0, 0, 0);
-    if (ret == -1) {
-        printf("Error sending message\n");
-    }
+    buff[2] = '\0';
 }
 
 
@@ -610,56 +677,6 @@ static void get_access_log() {
 }
 
 static void get_passwords() {
-
-    /* RESPONSE
-    +----------+----------+-------+----------+----------+----------+----------+----------+
-    |   TIME   |   USER   | RTYPE | PROTOCOL |   DEST   |  DPORT   |   ULOG   | PASSWORD |
-    +----------+----------+-------+----------+----------+----------+----------+----------+
-    | Variable | Variable |   1   | Variable | Variable | Variable | Variable | Variable |
-    +----------+----------+-------+----------+----------+----------+----------+----------+
-    */
-
-    const int RESPONSE_MAX_LENGTH = 2048;
-    uint8_t response[RESPONSE_MAX_LENGTH];
-
-    sniffed_credentials_list scl = socks_get_sniffed_credentials_list();
-
-    if (scl != NULL) {
-        int length = 0;
-        sniffed_credentials_node node = sniffed_credentials_get_first(scl);
-        while (node != NULL) {
-            struct sniffed_credentials *credential = sniffed_credentials_get(node);
-
-            strcpy(response + length, credential->datetime);
-            length += (strlen(credential->datetime) + 1);
-            strcpy(response + length, credential->username);
-            length += (strlen(credential->username) + 1);
-            strcpy(response + length, "P");
-            length += (strlen("P") + 1);
-            strcpy(response + length, credential->protocol);
-            length += (strlen(credential->protocol) + 1);
-            strcpy(response + length, credential->destination);
-            length += (strlen(credential->destination) + 1);
-            strcpy(response + length, credential->port);
-            length += (strlen(credential->port) + 1);
-            strcpy(response + length, credential->logger_user);
-            length += (strlen(credential->logger_user) + 1);
-            strcpy(response + length, credential->password);
-            length += (strlen(credential->password) + 1);
-            response[length] = '\0';
-
-            node = sniffed_credentials_get_next(node);
-        }
-        response[length] = '\0';
-    }
-
-    sniffed_credentials_destroy(scl);
-
-    int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t) * RESPONSE_MAX_LENGTH, NULL, 0, 0, 0,
-                           0, 0, 0);
-    if (ret == -1) {
-        printf("Error sending message\n");
-    }
 }
 
 static void parse_command(char *buffer) {

@@ -29,7 +29,8 @@ typedef enum {
 } user_mode;
 
 typedef enum {
-    IO_TIMEOUT = 1,
+    SYSTEM_LOG = 2,
+    SOCKS_LOG = 3
 } var_code;
 
 
