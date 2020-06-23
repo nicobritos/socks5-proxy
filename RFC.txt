@@ -214,7 +214,7 @@ Configure and Monitor for SOCKS V5 Server
            +------+-------+----------+
 
         o   VCODE - Reference to Var
-        	+ I/0 TIMEOUT - Code 0x01
+        	+ TIMEOUT - Code 0x01
             + LMODE - Logging severity - 0x02 
 
         o   VVALUE
