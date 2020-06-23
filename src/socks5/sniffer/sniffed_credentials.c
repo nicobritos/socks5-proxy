@@ -53,4 +53,5 @@ void sniffed_credentials_destroy(sniffed_credentials_list list) {
         free(node);
         node = aux;
     }
+    free(list);
 }
