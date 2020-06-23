@@ -223,7 +223,7 @@ void free_metrics(struct metrics *metrics) {
     }
 }
 
-struct metrics *error(struct metrics *ans, parser_error_t error_type) {
+struct metrics * error(struct metrics *ans, parser_error_t error_type) {
     free_metrics(ans);
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;

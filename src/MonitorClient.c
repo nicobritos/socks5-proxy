@@ -18,12 +18,14 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <getopt.h>
+
 #include "monitor_parser/client/auth_server_response_parser.h"
+#include "monitor_parser/client/get_metrics_parser.h"
 
 #include "MonitorClient.h"
 
 #define MAX_BUFFER 1024
-#define MY_PORT_NUM 57611
+#define MY_PORT_NUM 57614
 #define HISTORICAL_CONNECTION 1
 #define CONCURRENT_CONNECTIOS 2
 #define BYTES_TRANSFERRED 3
@@ -32,9 +34,9 @@
 #define METRIC_MENU 2
 static int sd = -1, rc;
 static char *address = "127.0.0.1";
-static uint16_t port = 57611;
+static uint16_t port = 57614;
 static struct addrinfo *res;
-static bool logged = false;
+static bool logged = true;
 static char buffer[MAX_BUFFER];
 static char *username;
 static char *password;
@@ -116,7 +118,7 @@ static bool authenticate_user(const char *username, const char *password){
     strcpy(datagram+1,username);
     strcpy(datagram+(1+ulen+1),password);
 
-    const int ANSWER_MAX_LENGTH = (25);
+    const int ANSWER_MAX_LENGTH = 255;
     uint8_t answer[ANSWER_MAX_LENGTH];
 
     bool *dflag = true;
@@ -137,9 +139,9 @@ static bool authenticate_user(const char *username, const char *password){
     +--------+----------+
     */
 
-    struct auth_response * ans = auth_response_parser(answer, ret+1);
+    struct auth_response * ans = auth_response_parser(answer, ret);
     if(ans->error != 0){
-        printf("error\n");
+        printf("Error\n");
     } else {
         printf("%s\n", ans->message);
         if(ans->status == 0x01){
@@ -175,11 +177,6 @@ static void login(){
             logged = authenticate_user(username,password);
         else
             printf("Password must be shorter");
-    }
-
-    if(!logged){
-        printf("Check if the username and password are correct\n");
-        return;
     }
 }
 
@@ -303,7 +300,7 @@ static void get_command(const int code){
 
     switch (code){
         case 0x01:
-            // get_metrics(answer,ret);
+            get_metrics(answer,ret);
             break;
         case 0x02:
             // get_users(answer,ret);
@@ -323,7 +320,7 @@ static void get_command(const int code){
 
 }
 
-static void get_metrics(char *response, int length){
+static void get_metrics(uint8_t *response, int length){
 
     /* RESPONSE
     +----------+----------+----------+
@@ -333,14 +330,14 @@ static void get_metrics(char *response, int length){
     +----------+----------+----------+
     */
 
-    // struct metrics * ans = get_metrics_parser(response, length+1);
-    // if(ans->error != NO_ERROR){
-    //     printf("error\n");
-    // } else {
-    //     printf("%u\n", ans->established_cons);
-    //     printf("%u\n", ans->actual_cons);
-    //     printf("%u\n", ans->bytes_transferred);
-    // }
+    struct metrics * ans = get_metrics_parser(response, length);
+    if(ans->error != NO_ERROR){
+        printf("error\n");
+    } else {
+        printf("%u\n", ans->established_cons);
+        printf("%u\n", ans->actual_cons);
+        printf("%u\n", ans->bytes_transferred);
+    }
 }
 
 static void get_users(char *response, int length){

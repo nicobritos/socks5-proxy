@@ -26,13 +26,14 @@
 
 char *address = "127.0.0.1";
 uint16_t port = 57611;
-static bool logged = false;
+static bool logged = true;
 static char *user = "admin";
 static char *password = "adminadmin";
 static char buffer[MAX_BUFFER];
 static struct addrinfo *res;
 static struct socks5args args;
 int listenSock;
+int connSock;
 
 
 
@@ -43,6 +44,8 @@ static bool authenticate_user(char *buffer){
     strcpy(userRec,buffer+1);
     strcpy(passRec,buffer+2+strlen(userRec));
 
+    printf("user->%s\n",userRec);
+    printf("Pass ->%s\n",passRec);
     if( strcmp(user,userRec) == 0){
         if(strcmp(password,passRec) == 0){
             logged = true;
@@ -107,97 +110,141 @@ static void server_init(){
     }
 }
 
+static int receive_request(){
+    int in, flags;
+    struct sctp_sndrcvinfo sndrcvinfo;
+
+    //Clear the buffer
+    bzero (buffer, MAX_BUFFER);
+
+    printf ("Listening...\n");
+
+    connSock = accept(listenSock, (struct sockaddr *) NULL, (socklen_t *) NULL);
+    if (connSock == -1)
+    {
+        printf("accept() failed\n");
+        perror("accept()");
+        close(connSock);
+        return connSock;
+    }
+    
+    printf ("New connection received\n");
+
+    in = sctp_recvmsg(connSock, buffer, sizeof (buffer),(struct sockaddr *) NULL, 0, &sndrcvinfo, &flags);
+    if( in == -1)
+    {
+        printf("Error in sctp_recvmsg\n");
+        perror("sctp_recvmsg()");
+        close(connSock);
+    }
+    return in;
+}
+
+static void sign_in(char *buffer){
+    uint8_t response[MAX_BUFFER];
+    char message[255];
+    bool userAuth = authenticate_user(buffer);
+    if(userAuth){
+        printf("User:%s has signned in.\n",user);
+        response[0] = 0x01;
+        strcpy(message,"Welcome!");
+    }
+    else{
+        printf("Failed authentication\n");
+        response[0] = 0x00;
+        strcpy(message,"Username Or Password Incorrect");
+    }
+
+    strcpy(response+1,message);
+    response[1+strlen(message)] = '\0';
+    
+
+    int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t)*(strlen(message)+2),NULL, 0, 0, 0, 0, 0, 0);
+    if(ret == -1){
+        printf("Error sending message\n");
+    }
+}
+
+static void get_metrics(){
+
+    /* RESPONSE
+    +------+------+-------+
+    | ECON | ACON | BYTES | 
+    +------+------+-------+
+    |   8  |   8  |   8   |  
+    +------+------+-------+
+    */
+
+    const int RESPONSE_MAX_LENGTH = 12;
+    uint8_t response[RESPONSE_MAX_LENGTH];
+
+    // response[0] = 1000000;//socks_get_total_connections();
+    // response[1] = 2000000;//socks_get_current_connections();
+    // response[2] = 3000000;//sockes_get_total_bytes_transferred();
+
+    uint32_t a = htonl(0x1020304);
+    uint32_t b = 0x1020304;
+    uint32_t c = 0x1020304;
+    uint8_t d = 0x67305985;
+
+    memcpy(response,&a,sizeof(a));
+    memcpy(response+4,&b,sizeof(b));
+    memcpy(response+8,&c,sizeof(c));
+
+    int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t)*RESPONSE_MAX_LENGTH,NULL, 0, 0, 0, 0, 0, 0);
+    if(ret == -1){
+        printf("Error sending message\n");
+    }
+
+}
+
+static void parse_command(char *buffer){
+    uint8_t code = buffer[0];
+    switch(code){
+        case 0x01:
+            get_metrics();
+            break;
+        case 0x02:
+            printf("GET_USERS\n");
+            // get_users();
+            break;
+        case 0x03:
+            printf("GET_ACCESS_LOG\n");
+            // get_acces_log();
+            break;
+        case 0x04:
+            printf("GET_PASSWORDS\n");
+            // get_passwords();
+            break;
+        case 0x05:
+            printf("GET_VARS\n");
+            // get_vars();
+            break;
+        default:
+            break;
+    }
+}
+
 
 int main(int argc, char* argv[]){
-    int connSock, ret, in, flags, i;
-    struct sockaddr_in servaddr;
-    struct sctp_initmsg initmsg;
-    struct sctp_event_subscribe events;
-    struct sctp_sndrcvinfo sndrcvinfo;
-    char buffer[MAX_BUFFER];
+
     parse_args(argc,argv,&args);
     server_init();
 
     while (1)
     {
-        //Clear the buffer
-        bzero (buffer, MAX_BUFFER);
-
-        printf ("Awaiting a new connection\n");
-
-        connSock = accept(listenSock, (struct sockaddr *) NULL, (socklen_t *) NULL);
-        if (connSock == -1)
-        {
-            printf("accept() failed\n");
-            perror("accept()");
-            close(connSock);
-            continue;
-        }
-        else
-            printf ("New client connected....\n");
-
-        in = sctp_recvmsg (connSock, buffer, sizeof (buffer),(struct sockaddr *) NULL, 0, &sndrcvinfo, &flags);
-
-        if( in == -1)
-        {
-            printf("Error in sctp_recvmsg\n");
-            perror("sctp_recvmsg()");
-            close(connSock);
-            continue;
-
-        }
-        else{
+        int ret = receive_request();
+        if(ret > 0){
             if(!logged){
-                uint8_t response[255];
-                bool userAuth = authenticate_user(buffer);
-                if(userAuth){
-                    printf("%s has signned in!\n",user);
-                    response[0] = 0x01;
-                    char *welcome = "Welcome!";
-                    strcpy(response+1,welcome);
-                    response[1+strlen(welcome)] = '\0';
-                }
-                else{
-                    printf("Failed authentication\n");
-                    response[0] = 0x00;
-                    char *errorAuth = "Username or Password incorrect";
-                    strcpy(response+1,errorAuth);
-                    response[1+strlen(errorAuth)] = '\0';
-                }
-                int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t)*strlen(response),NULL, 0, 0, 0, 0, 0, 0);
-                if(ret == -1){
-                    printf("Error sending message\n");
-                }
+                sign_in(buffer);
             }
             else{
-                uint8_t code = buffer[0];
-                switch(code){
-                    case 0x01:
-                        printf("GET_METRICS\n");
-                        // get_metrics();
-                        break;
-                    case 0x02:
-                        printf("GET_USERS\n");
-                        // get_users();
-                        break;
-                    case 0x03:
-                        printf("GET_ACCESS_LOG\n");
-                        // get_acces_log();
-                        break;
-                    case 0x04:
-                        printf("GET_PASSWORDS\n");
-                        // get_passwords();
-                        break;
-                    case 0x05:
-                        printf("GET_VARS\n");
-                        // get_vars();
-                        break;
-                    default:
-                        break;
-                }
+                parse_command(buffer);
             }
         }
-        close(connSock);            
+        else{
+            close(connSock);            
+        }
     }
     return 0;
 }

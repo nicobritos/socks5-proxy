@@ -7,11 +7,11 @@
 #define CHUNK_SIZE 10
 
 /* Funciones auxiliares */
-void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
+static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
 
-struct auth_response *add_char_to_message(struct auth_response *ans, char c, size_t *message_current_length);
+static struct auth_response *add_char_to_message(struct auth_response *ans, char c, size_t *message_current_length);
 
-struct auth_response *error(struct auth_response *ans, parser_error_t error_type);
+static struct auth_response *error(struct auth_response *ans, parser_error_t error_type);
 
 // definición de maquina
 
@@ -145,7 +145,7 @@ void auth_response_free(struct auth_response *auth_response) {
     }
 }
 
-struct auth_response *
+static struct auth_response *
 add_char_to_message(struct auth_response *ans, char c, size_t *message_current_length) {
     ans->message = resize_if_needed(ans->message, sizeof(*(ans->message)), *message_current_length);
     if (ans->message == NULL) {
@@ -155,14 +155,14 @@ add_char_to_message(struct auth_response *ans, char c, size_t *message_current_l
     return ans;
 }
 
-struct auth_response *error(struct auth_response *ans, parser_error_t error_type) {
+static struct auth_response *error(struct auth_response *ans, parser_error_t error_type) {
     auth_response_free(ans);
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;
     return ans;
 }
 
-void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
+static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
     if (current_length % CHUNK_SIZE == 0) {
         return realloc(ptr, ptr_size * (current_length + CHUNK_SIZE));
     }
