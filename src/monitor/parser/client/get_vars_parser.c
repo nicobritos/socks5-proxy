@@ -136,13 +136,15 @@ static struct parser_definition definition = {
         .start_state  = ST_VCODE,
 };
 
-struct vars * get_vars_parser(uint8_t *s, size_t length) {
+struct vars * get_vars_parser_init(){
     struct vars * ans = calloc(1, sizeof(*ans));
     struct parser *parser = parser_init(parser_no_classes(), &definition);
-    size_t message_length = 0;
-    int finished = 0;
+}
+
+struct vars * get_vars_parser_consume(uint8_t *s, size_t length, struct vars * ans) {
+    
     for (size_t i = 0; i<length; i++) {
-        const struct parser_event* ret = parser_feed(parser, s[i]);
+        const struct parser_event* ret = parser_feed(ans->parser, s[i]);
         switch (ret->type) {
             case COPY_IO_TIMEOUT:
                 ans->io_timeout *= 10;
@@ -152,23 +154,21 @@ struct vars * get_vars_parser(uint8_t *s, size_t length) {
                 ans->lmode += s[i] - '0';
             break;
             case END_T:
-                finished = 1;
+                ans->finished = 1;
             break;
             case INVALID_INPUT_FORMAT_T:
-                parser_destroy(parser);
                 return error(ans, INVALID_INPUT_FORMAT_ERROR);
         }
     }
-    if(!finished){
-        parser_destroy(parser);
-        return error(ans, INVALID_INPUT_FORMAT_ERROR);
-    }
-    parser_destroy(parser);
     return ans;
 }
 
 void free_vars(struct vars *vars) {
     if (vars != NULL) {
+        if(vars->parser != NULL){
+            parser_destroy(vars->parser);
+            vars->parser = NULL;
+        }
         free(vars);
     }
 }
@@ -195,7 +195,7 @@ void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
  *     4. Run in the terminal "afl-fuzz -i parser_test_case -o afl-output -- ./auth_server_response_parser @@"
  */
 
-
+/*
 int main(int argc, char ** argv){
     FILE * fp;
     int16_t c;
@@ -234,3 +234,4 @@ int main(int argc, char ** argv){
     free_vars(ans);
     return 0;
 }
+*/
