@@ -148,7 +148,7 @@ bool auth_user_pass_helper_verify(const struct auth_user_pass_credentials *crede
     sorted_hashmap_node node = sorted_hashmap_find(credentials_map, (void*) credentials);
     if (node == NULL) return false;
     const struct auth_user_pass_credentials *other_credentials = sorted_hashmap_get_element(node);
-    return strcmp(credentials->password, other_credentials->password) == 0;
+    return credentials->active && strcmp(credentials->password, other_credentials->password) == 0;
 }
 
 /**
