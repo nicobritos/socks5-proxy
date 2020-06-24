@@ -161,6 +161,8 @@ static void write_close(unsigned state, struct selector_key *key);
 static bool write_response_buffer(monitor_t const m);
 static bool write_buffer_metrics(const monitor_t m);
 static bool write_buffer_access_log(const monitor_t m);
+static bool write_buffer_password(const monitor_t m);
+static bool write_buffer_users(const monitor_t m);
 
 static bool authenticate_user(char *buffer);
 static void sign_in(char *buffer);
@@ -342,6 +344,7 @@ static void close_fd_(int fd, struct selector_key* key) {
 static void read_init(unsigned state, struct selector_key *key) {
     ATTACHMENT(key)->command = command_request_parser_init();
     ATTACHMENT(key)->sent = false;
+    memset(&ATTACHMENT(key)->command_data, 0, sizeof(ATTACHMENT(key)->command_data));
 }
 
 static unsigned read_do(struct selector_key *key) {
@@ -396,53 +399,13 @@ static bool write_response_buffer(const monitor_t m) {
             return write_buffer_metrics(m);
         case GET_ACCESS_LOG:
             return write_buffer_access_log(m);
-        case GET_PASSWORDS: {
-            if (m->sent && m->command_data.passwords.current_node == NULL)
-                return false;
-
-            if (m->command_data.passwords.current_node == NULL) {
-                m->command_data.passwords.current_node = sniffed_credentials_get_first(
-                        socks_get_sniffed_credentials_list());
-                m->sent = true;
-            }
-            if (m->command_data.passwords.current_node != NULL) {
-                struct sniffed_credentials *credentials = sniffed_credentials_get(m->command_data.passwords.current_node);
-
-                sniffed_credentials_node next = sniffed_credentials_get_next(m->command_data.passwords.current_node);
-                size_t n, i;
-                char *b = buffer_write_ptr(&m->write_buffer, &n);
-
-                i = sprintf(b, "%s", credentials->datetime);
-                b[i++] = '\0';
-                i += sprintf(b, "%s", credentials->username);
-                b[i++] = '\0';
-                i += sprintf(b, "P");
-                b[i++] = '\0';
-                i += sprintf(b, "%s", credentials->protocol);
-                b[i++] = '\0';
-                i += sprintf(b, "%s", credentials->destination);
-                b[i++] = '\0';
-                i += sprintf(b, "%s", credentials->port);
-                b[i++] = '\0';
-                i += sprintf(b, "%s", credentials->logger_user);
-                b[i++] = '\0';
-                i += sprintf(b, "%s", credentials->password);
-                b[i++] = '\0';
-                b[i++] = '\0';
-                if (next == NULL)
-                    b[i++] = '\0';
-
-                buffer_write_adv(&m->write_buffer, i);
-
-                m->command_data.passwords.current_node = next;
-            }
-            return true;
-        }
+        case GET_PASSWORDS:
+            return write_buffer_password(m);
         case GET_USERS: {
             if (m->sent && m->command_data.users.current_node == NULL)
                 return false;
 
-            if (m->command_data.passwords.current_node == NULL) {
+            if (m->command_data.users.current_node == NULL) {
                 m->command_data.users.list = auth_user_pass_get_values();
                 m->command_data.users.current_node = sorted_hashmap_list_get_first(m->command_data.users.list);
                 m->sent = true;
@@ -583,46 +546,205 @@ static bool write_buffer_access_log(const monitor_t m) {
         m->sent = true;
     }
 
-    struct socks_access_log_details_t *details = socks_get_access_log(m->command_data.access_log.current_node);
+    bool had_space_for_one = false;
+    while (m->command_data.access_log.current_node != NULL) {
+        struct socks_access_log_details_t *details = socks_get_access_log(m->command_data.access_log.current_node);
 
-    socks_access_log_node_t next = socks_get_next_access_log_node(m->command_data.access_log.current_node);
-    b = (char *) buffer_write_ptr(&m->write_buffer, &n);
+        socks_access_log_node_t next = socks_get_next_access_log_node(m->command_data.access_log.current_node);
+        b = (char *) buffer_write_ptr(&m->write_buffer, &n);
 
-    // Tenemos que ver primero cuanto espacio necesitamos
-    // Uso el caracter '.' como separador de strings, representa
-    // el NULL en el RFC
-    size_t space_needed = snprintf(
-            NULL,
-            0,
-            "%s.%s.A.%s.%s.%s.%s.%s..",
-            "");
+        // Tenemos que ver primero cuanto espacio necesitamos
+        // Uso el caracter '.' como separador de strings, representa
+        // el NULL en el RFC
+        size_t space_needed = snprintf(
+                NULL,
+                0,
+                "%s.%s.A.%s.%s.%s.%s.%d..",
+                details->datetime,
+                details->username,
+                details->origin.ip,
+                details->origin.port,
+                details->destination.name,
+                details->destination.port,
+                details->status);
+        if (n < space_needed)
+            break;
 
-    i = sprintf(b, "%s", details->datetime);
-    b[i++] = '\0';
-    i += sprintf(b, "%s", details->username);
-    b[i++] = '\0';
-    i += sprintf(b, "A");
-    b[i++] = '\0';
-    i += sprintf(b, "%s", details->origin.ip);
-    b[i++] = '\0';
-    i += sprintf(b, "%s", details->origin.port);
-    b[i++] = '\0';
-    i += sprintf(b, "%s", details->destination.name);
-    b[i++] = '\0';
-    i += sprintf(b, "%s", details->destination.port);
-    b[i++] = '\0';
-    i += sprintf(b, "%d", details->status);
-    b[i++] = '\0';
-    if (next == NULL)
-        b[i++] = '\0';
+        i = sprintf(b + i, "%s", details->datetime);
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "%s", details->username);
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "A");
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "%s", details->origin.ip);
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "%s", details->origin.port);
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "%s", details->destination.name);
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "%s", details->destination.port);
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "%d", details->status);
+        i += 1; // sprintf copia null
+        if (next == NULL)
+            b[i++] = '\0';
 
-    buffer_write_adv(&m->write_buffer, i);
+        buffer_write_adv(&m->write_buffer, i);
 
-    m->command_data.access_log.current_node = next;
-    return true;
+        m->command_data.access_log.current_node = next;
+        if (!had_space_for_one) had_space_for_one = true;
+    }
+
+    return had_space_for_one;
 }
 
+static bool write_buffer_password(const monitor_t m) {
+    if (m->sent && m->command_data.passwords.current_node == NULL)
+        return false;
 
+    char *b;
+    size_t n, i;
+    if (m->command_data.passwords.current_node == NULL) {
+        m->command_data.passwords.current_node = sniffed_credentials_get_first(socks_get_sniffed_credentials_list());
+        if (m->command_data.passwords.current_node == NULL) {
+            b = (char *) buffer_write_ptr(&m->write_buffer, &n);
+            if (n < 3) // Necesitamos escribir un triple null (fin de entry, ver RFC)
+                return false;
+
+            b[0] = b[1] = b[2] = '\0';
+            buffer_write_adv(&m->write_buffer, i);
+        }
+
+        m->sent = true;
+    }
+
+    bool had_space_for_one = false;
+    while (m->command_data.passwords.current_node != NULL) {
+        struct sniffed_credentials *credentials = sniffed_credentials_get(m->command_data.passwords.current_node);
+
+        sniffed_credentials_node next = sniffed_credentials_get_next(m->command_data.passwords.current_node);
+        b = (char *) buffer_write_ptr(&m->write_buffer, &n);
+
+        // Tenemos que ver primero cuanto espacio necesitamos
+        // Uso el caracter '.' como separador de strings, representa
+        // el NULL en el RFC
+        size_t space_needed = snprintf(
+                NULL,
+                0,
+                "%s.%s.P.%s.%s.%s.%s.%s..",
+                credentials->datetime,
+                credentials->username,
+                credentials->protocol,
+                credentials->destination,
+                credentials->port,
+                credentials->logger_user,
+                credentials->password);
+        if (n < space_needed)
+            break;
+
+        i = sprintf(b + i, "%s", credentials->datetime);
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "%s", credentials->username);
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "P");
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "%s", credentials->protocol);
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "%s", credentials->destination);
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "%s", credentials->port);
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "%s", credentials->logger_user);
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "%s", credentials->password);
+        i += 1; // sprintf copia null
+        b[i++] = '\0'; // Otro mas significa final de entry
+        if (next == NULL)
+            b[i++] = '\0';
+
+        buffer_write_adv(&m->write_buffer, i);
+
+        m->command_data.passwords.current_node = next;
+        if (!had_space_for_one) had_space_for_one = true;
+    }
+
+    return had_space_for_one;
+}
+
+static bool write_buffer_users(const monitor_t m) {
+//    if (m->sent && m->command_data.users.current_node == NULL)
+//        return false;
+//
+//    char *b;
+//    size_t n, i;
+//    if (m->command_data.users.list == NULL) {
+//        m->command_data
+//        m->command_data.passwords.current_node = sniffed_credentials_get_first(socks_get_sniffed_credentials_list());
+//        if (m->command_data.passwords.current_node == NULL) {
+//            b = (char *) buffer_write_ptr(&m->write_buffer, &n);
+//            if (n < 1) // Necesitamos escribir un null (fin de entry, ver RFC)
+//                return false;
+//
+//            b[0] = '\0';
+//            buffer_write_adv(&m->write_buffer, i);
+//        }
+//
+//        m->sent = true;
+//    }
+//
+//    bool had_space_for_one = false;
+//    while (m->command_data.passwords.current_node != NULL) {
+//        struct sniffed_credentials *credentials = sniffed_credentials_get(m->command_data.passwords.current_node);
+//
+//        sniffed_credentials_node next = sniffed_credentials_get_next(m->command_data.passwords.current_node);
+//        b = (char *) buffer_write_ptr(&m->write_buffer, &n);
+//
+//        // Tenemos que ver primero cuanto espacio necesitamos
+//        // Uso el caracter '.' como separador de strings, representa
+//        // el NULL en el RFC
+//        size_t space_needed = snprintf(
+//                NULL,
+//                0,
+//                "%s.%s.P.%s.%s.%s.%s.%s..",
+//                credentials->datetime,
+//                credentials->username,
+//                credentials->protocol,
+//                credentials->destination,
+//                credentials->port,
+//                credentials->logger_user,
+//                credentials->password);
+//        if (n < space_needed)
+//            break;
+//
+//        i = sprintf(b + i, "%s", credentials->datetime);
+//        i += 1; // sprintf copia null
+//        i += sprintf(b + i, "%s", credentials->username);
+//        i += 1; // sprintf copia null
+//        i += sprintf(b + i, "P");
+//        i += 1; // sprintf copia null
+//        i += sprintf(b + i, "%s", credentials->protocol);
+//        i += 1; // sprintf copia null
+//        i += sprintf(b + i, "%s", credentials->destination);
+//        i += 1; // sprintf copia null
+//        i += sprintf(b + i, "%s", credentials->port);
+//        i += 1; // sprintf copia null
+//        i += sprintf(b + i, "%s", credentials->logger_user);
+//        i += 1; // sprintf copia null
+//        i += sprintf(b + i, "%s", credentials->password);
+//        i += 1; // sprintf copia null
+//        b[i++] = '\0'; // Otro mas significa final de entry
+//        if (next == NULL)
+//            b[i++] = '\0';
+//
+//        buffer_write_adv(&m->write_buffer, i);
+//
+//        m->command_data.passwords.current_node = next;
+//        if (!had_space_for_one) had_space_for_one = true;
+//    }
+
+//    return had_space_for_one;
+    return false;
+}
 
 
 
