@@ -42,8 +42,15 @@ next_state(struct parser_event *ret, const uint8_t c) {
 }
 
 static void
-copy_lmode(struct parser_event *ret, const uint8_t c) {
+copy_system_lmode(struct parser_event *ret, const uint8_t c) {
     ret->type = COPY_SYSTEM_LMODE;
+    ret->n = 1;
+    ret->data[0] = c;
+}
+
+static void
+copy_socks_lmode(struct parser_event *ret, const uint8_t c) {
+    ret->type = COPY_SOCKS_LMODE;
     ret->n = 1;
     ret->data[0] = c;
 }
@@ -71,19 +78,19 @@ static const struct parser_state_transition VCODE[] = {
 
 static const struct parser_state_transition SYSTEM_LMODE_VALUE[] = {
         {.when = '\0', .dest = ST_VCODE, .act1 = next_state,},
-        {.when = '1', .dest = ST_LMODE_END, .act1 = copy_lmode,},
-        {.when = '2', .dest = ST_LMODE_END, .act1 = copy_lmode,},
-        {.when = '3', .dest = ST_LMODE_END, .act1 = copy_lmode,},
-        {.when = '4', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+        {.when = '1', .dest = ST_LMODE_END, .act1 = copy_system_lmode,},
+        {.when = '2', .dest = ST_LMODE_END, .act1 = copy_system_lmode,},
+        {.when = '3', .dest = ST_LMODE_END, .act1 = copy_system_lmode,},
+        {.when = '4', .dest = ST_LMODE_END, .act1 = copy_system_lmode,},
         {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
 
 static const struct parser_state_transition SOCKS_LMODE_VALUE[] = {
         {.when = '\0', .dest = ST_VCODE, .act1 = next_state,},
-        {.when = '1', .dest = ST_LMODE_END, .act1 = copy_lmode,},
-        {.when = '2', .dest = ST_LMODE_END, .act1 = copy_lmode,},
-        {.when = '3', .dest = ST_LMODE_END, .act1 = copy_lmode,},
-        {.when = '4', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+        {.when = '1', .dest = ST_LMODE_END, .act1 = copy_socks_lmode,},
+        {.when = '2', .dest = ST_LMODE_END, .act1 = copy_socks_lmode,},
+        {.when = '3', .dest = ST_LMODE_END, .act1 = copy_socks_lmode,},
+        {.when = '4', .dest = ST_LMODE_END, .act1 = copy_socks_lmode,},
         {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
 

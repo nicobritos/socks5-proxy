@@ -502,6 +502,12 @@ static unsigned read_do(struct selector_key *key) {
         uint8_t ret;
         write_response_buffer(m, &ret);
         if (SELECTOR_SUCCESS == selector_set_interest_key(key, ret == READ ? OP_READ : OP_WRITE)) {
+            if (ret == READ) {
+                free_command(m->command);
+                m->command = command_request_parser_init();
+                m->sent = false;
+                memset(&m->command_data, 0, sizeof(m->command_data));
+            }
             return ret;
         } else {
             return ERROR;
@@ -897,7 +903,6 @@ static void set_var(const monitor_t m) {
     m->sent = true;
 
     log_t log;
-    long log_mode;
     if (m->command->var == SYSTEM_LOG) {
         log = logger_get_system_log();
     } else if (m->command->var == SOCKS_LOG) {
@@ -905,10 +910,8 @@ static void set_var(const monitor_t m) {
     } else {
         return;
     }
-    char *end = 0;
-    log_mode = strtol((char *) m->command->var_value, &end, 10);
 
-    logger_set_log_severity(log, get_log_severity(log_mode));
+    logger_set_log_severity(log, get_log_severity(m->command->var_value[0]));
 }
 
 static uint8_t get_log_n(enum log_severity severity) {
