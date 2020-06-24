@@ -13,9 +13,8 @@ Configure and Monitor for SOCKS V5 Server
            |  1  | Variable | Variable |
            +-----+----------+----------+
 
-   The VER field contains the current version of the sub-negotiation,
-   which is X'01'. The UNAME field contains the username as known to the
-   source operating system. The UNAME field is a null terminated string (ASCII). 
+   The VER field contains the current version. 
+   Thee UNAME field is a null terminated string (ASCII), represents the user name. 
    The PASSWD field contains the password association with the given UNAME.
    The PASSWD field is a null terminated string (ASCII). 
 
@@ -169,20 +168,21 @@ Configure and Monitor for SOCKS V5 Server
            +-------+----------+
 
         o   VCODE - Reference to Var
-        		+ I/0 TIMEOUT - Code 0x01
-        		+ LMODE - Logging severity - Code 0x02
+        		+ SYS LOG - Code 0x01
+        		+ SOCKS LOG - Code 0x02
 
         o   VVALUE - Variable Value as string. It is null terminated
-                + I/0 TIMEOUT
-                + LMODE
+                + SYS LOG
                     -> LOG_SEVERITY_DEBUG - 0x01
                     -> LOG_SEVERITY_INFO - 0x02
                     -> LOG_SEVERITY_WARNING - 0x03
                     -> LOG_SEVERITY_ERROR - 0x04
-
-        Example
-        
-        '\14000\23' - Meaning I/0 TIMEOUT = 4000 and LMODE = 3
+                
+                + SOCKS LOG
+                    -> LOG_SEVERITY_DEBUG - 0x01
+                    -> LOG_SEVERITY_INFO - 0x02
+                    -> LOG_SEVERITY_WARNING - 0x03
+                    -> LOG_SEVERITY_ERROR - 0x04
 
 
 	-SET USER - Code 0x06
@@ -213,14 +213,19 @@ Configure and Monitor for SOCKS V5 Server
            |  1   |   1   | Variable |  
            +------+-------+----------+
 
-        o   VCODE - Reference to Var
-        	+ TIMEOUT - Code 0x01
-            + LMODE - Logging severity - 0x02 
+        o   VCODE - Reference to Var - Logging severity 
+       		+ SYS LOG - Code 0x01
+            + LMODE - 0x02 
 
-        o   VVALUE
-        	+ I/0 TIMEOUTS is size_t big endian
-            + LMODE
-              -> LOG_SEVERITY_DEBUG - 0x01
-              -> LOG_SEVERITY_INFO - 0x02
-              -> LOG_SEVERITY_WARNING - 0x03
-              -> LOG_SEVERITY_ERROR - 0x04
+        o   VVALUE - Variable Value as string. It is null terminated
+                + SYS LOG
+                    -> LOG_SEVERITY_DEBUG - 0x01
+                    -> LOG_SEVERITY_INFO - 0x02
+                    -> LOG_SEVERITY_WARNING - 0x03
+                    -> LOG_SEVERITY_ERROR - 0x04
+                
+                + SOCKS LOG
+                    -> LOG_SEVERITY_DEBUG - 0x01
+                    -> LOG_SEVERITY_INFO - 0x02
+                    -> LOG_SEVERITY_WARNING - 0x03
+                    -> LOG_SEVERITY_ERROR - 0x04
