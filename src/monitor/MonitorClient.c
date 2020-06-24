@@ -454,7 +454,8 @@ static void get_vars(uint8_t *response, int length){
             break;
         }
         ans =  get_vars_parser_consume(answer,ret,ans);
-        printf("Logging severity = %d\n", ans->lmode);
+        printf("IO Timeout = %zu\n", ans->io_timeout);
+        printf("Logger Severity = %u\n", ans->lmode);
     }
     // free_vars(ans);  
 }
