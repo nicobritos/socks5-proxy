@@ -221,9 +221,9 @@ static void append_to_log_s(log_t log, char *s) {
     fputs(s, log->file);
     fflush(log->file);
 
-    FILE *console = log == system_log ? stderr : stdout;
-    fputs(s, console);
-    fflush(console);
+//    FILE *console = log == system_log ? stderr : stdout;
+//    fputs(s, console);
+//    fflush(console);
 }
 
 /**
