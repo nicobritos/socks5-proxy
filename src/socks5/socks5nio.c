@@ -1288,7 +1288,7 @@ static void log_request(const struct selector_key *key, const struct request_par
             node->details.origin.port,
             node->details.destination.name,
             node->details.destination.port,
-            node->details.status)
+            node->details.status);
 
     file_log:
     if (logger != NULL) {
