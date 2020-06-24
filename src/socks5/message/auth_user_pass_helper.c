@@ -89,7 +89,11 @@ enum auth_user_pass_helper_status auth_user_pass_helper_add(const struct auth_us
     if (node != NULL) {
         return auth_user_pass_helper_status_error_user_already_exists;
     } else {
-        sorted_hashmap_add(credentials_map, (void*)credentials);
+        struct auth_user_pass_credentials *user = duplicate_credentials(credentials);
+        if (user == NULL)
+            return auth_user_pass_helper_status_error_no_memory;
+
+        sorted_hashmap_add(credentials_map, (void*)user);
     }
     return auth_user_pass_helper_status_ok;
 }
@@ -140,28 +144,6 @@ enum auth_user_pass_helper_status auth_user_pass_helper_set_enable(const char *u
 }
 
 /**
- * Remueve las credenciales asociadas a un usuario y lo guarda en el archivo
- * @param username del usuario al cual sacar
- * @return auth_user_pass_helper_status_... acorde al resultado
- */
-enum auth_user_pass_helper_status auth_user_pass_helper_remove(const char *username) {
-    if (credentials_map == NULL) return auth_user_pass_helper_status_error_not_initialized;
-    if (username == NULL || *username == '\0') return auth_user_pass_helper_status_error_invalid_credentials;
-
-    struct auth_user_pass_credentials credentials = {
-            .username = (char *)username,
-            .username_length = strlen(username),
-            .password = NULL
-    };
-    sorted_hashmap_node node = sorted_hashmap_find(credentials_map, (void*) &credentials);
-    if (node == NULL)
-        return auth_user_pass_helper_status_error_user_not_found;
-
-    sorted_hashmap_remove(credentials_map, node);
-    return auth_user_pass_helper_status_ok;
-}
-
-/**
  * Verifica que el usuario exista y que la contrasena sea correcta
  * @param credentials
  * @return bool
@@ -207,9 +189,9 @@ static struct auth_user_pass_credentials *duplicate_credentials(const struct aut
         free(copy);
         return NULL;
     }
-    memcpy(copy->username, credentials->username, credentials->username_length + 1);
+    memcpy(copy->username, credentials->username, copy->username_length + 1);
 
-    copy->password = malloc(sizeof(*copy->password) * password_length + 1);
+    copy->password = malloc(sizeof(*copy->password) * (password_length + 1));
     if (copy->password == NULL) {
         free(copy->username);
         free(copy);
