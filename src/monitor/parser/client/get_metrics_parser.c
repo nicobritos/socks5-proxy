@@ -260,12 +260,15 @@ static struct parser_definition definition = {
         .start_state  = ST_ECON_1,
 };
 
-struct metrics * get_metrics_parser(uint8_t *s, size_t length) {
+struct metrics * get_metrics_parser_init(){
     struct metrics * ans = calloc(1, sizeof(*ans));
-    struct parser *parser = parser_init(parser_no_classes(), &definition);
-    int finished = 0;
+    ans->parser = parser_init(parser_no_classes(), &definition);
+    ans->finished = 0;
+}
+
+struct metrics * get_metrics_parser_consume(uint8_t *s, size_t length, struct metrics * ans) {
     for (size_t i = 0; i<length; i++) {
-        const struct parser_event* ret = parser_feed(parser, s[i]);
+        const struct parser_event* ret = parser_feed(ans->parser, s[i]);
         switch (ret->type) {
             case COPY_ECON:
                 ans->established_cons *= 256;
@@ -282,23 +285,20 @@ struct metrics * get_metrics_parser(uint8_t *s, size_t length) {
             case END_T:
                 ans->bytes_transferred *= 256;
                 ans->bytes_transferred += s[i];
-                finished = 1;
+                ans->finished = 1;
             break;
             case INVALID_INPUT_FORMAT_T:
-                parser_destroy(parser);
                 return error(ans, INVALID_INPUT_FORMAT_ERROR);
         }
     }
-    if(!finished){
-        parser_destroy(parser);
-        return error(ans, INVALID_INPUT_FORMAT_ERROR);
-    }
-    parser_destroy(parser);
     return ans;
 }
 
 void free_metrics(struct metrics *metrics) {
     if (metrics != NULL) {
+        if(metrics->parser != NULL){
+            parser_destroy(metrics->parser);
+        }
         free(metrics);
     }
 }

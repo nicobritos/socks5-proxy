@@ -105,34 +105,30 @@ static struct parser_definition definition = {
         .start_state  = ST_STATUS,
 };
 
-struct auth_response * auth_response_parser(uint8_t *s, size_t length) {
+struct auth_response * auth_response_parser_init(){
     struct auth_response * ans = calloc(1, sizeof(*ans));
-    struct parser *parser = parser_init(parser_no_classes(), &definition);
-    size_t message_length = 0;
-    int finished = 0;
+    ans->parser = parser_init(parser_no_classes(), &definition);
+    return ans;
+}
+
+struct auth_response * auth_response_parser_consume(uint8_t *s, size_t length, struct auth_response * ans) {
     for (size_t i = 0; i<length; i++) {
-        const struct parser_event* ret = parser_feed(parser, s[i]);
+        const struct parser_event* ret = parser_feed(ans->parser, s[i]);
         switch (ret->type) {
             case COPY_STATUS:
                 ans->status = s[i];
             break;
             case COPY_MESSAGE:
-                add_char_to_message(ans, s[i], &message_length);
+                add_char_to_message(ans, s[i], &(ans->message_length));
             break;
             case END_T:
-                add_char_to_message(ans, '\0', &message_length);
-                finished = 1;
+                add_char_to_message(ans, '\0', &(ans->message_length));
+                ans->finished = 1;
             break;
             case INVALID_INPUT_FORMAT_T:
-                parser_destroy(parser);
                 return error(ans, INVALID_INPUT_FORMAT_ERROR);
         }
     }
-    if(!finished){
-        parser_destroy(parser);
-        return error(ans, INVALID_INPUT_FORMAT_ERROR);
-    }
-    parser_destroy(parser);
     return ans;
 }
 
@@ -140,6 +136,11 @@ void auth_response_free(struct auth_response *auth_response) {
     if (auth_response != NULL) {
         if (auth_response->message != NULL) {
             free(auth_response->message);
+            auth_response->message = NULL;
+        }
+        if(auth_response->parser != NULL){
+            parser_destroy(auth_response->parser);
+            auth_response->parser = NULL;
         }
         free(auth_response);
     }
@@ -205,9 +206,10 @@ int main(int argc, char ** argv){
     buffer = realloc(buffer, i * sizeof(*buffer));
     fclose(fp);
 
-    struct auth_response * ans = auth_response_parser(buffer, i);
+    struct auth_response * ans = auth_response_parser_init();
+    ans = auth_response_parser_consume(buffer, i, ans);
     free(buffer);
-    if(ans->error != 0){
+    if(ans->error != NO_ERROR){
         printf("error\n");
     } else {
         printf("%u\n", ans->status);

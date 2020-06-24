@@ -7,9 +7,9 @@
 #define CHUNK_SIZE 10
 
 /* Funciones auxiliares */
-static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
+void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
 
-static struct vars *error(struct vars *ans, parser_error_t error_type);
+struct vars *error(struct vars *ans, parser_error_t error_type);
 
 // definición de maquina
 
@@ -136,13 +136,15 @@ static struct parser_definition definition = {
         .start_state  = ST_VCODE,
 };
 
-struct vars * get_vars_parser(uint8_t *s, size_t length) {
+struct vars * get_vars_parser_init(){
     struct vars * ans = calloc(1, sizeof(*ans));
     struct parser *parser = parser_init(parser_no_classes(), &definition);
-    size_t message_length = 0;
-    int finished = 0;
+}
+
+struct vars * get_vars_parser_consume(uint8_t *s, size_t length, struct vars * ans) {
+    
     for (size_t i = 0; i<length; i++) {
-        const struct parser_event* ret = parser_feed(parser, s[i]);
+        const struct parser_event* ret = parser_feed(ans->parser, s[i]);
         switch (ret->type) {
             case COPY_IO_TIMEOUT:
                 ans->io_timeout *= 10;
@@ -152,35 +154,33 @@ struct vars * get_vars_parser(uint8_t *s, size_t length) {
                 ans->lmode += s[i] - '0';
             break;
             case END_T:
-                finished = 1;
+                ans->finished = 1;
             break;
             case INVALID_INPUT_FORMAT_T:
-                parser_destroy(parser);
                 return error(ans, INVALID_INPUT_FORMAT_ERROR);
         }
     }
-    if(!finished){
-        parser_destroy(parser);
-        return error(ans, INVALID_INPUT_FORMAT_ERROR);
-    }
-    parser_destroy(parser);
     return ans;
 }
 
 void free_vars(struct vars *vars) {
     if (vars != NULL) {
+        if(vars->parser != NULL){
+            parser_destroy(vars->parser);
+            vars->parser = NULL;
+        }
         free(vars);
     }
 }
 
-static struct vars *error(struct vars *ans, parser_error_t error_type) {
+struct vars *error(struct vars *ans, parser_error_t error_type) {
     free_vars(ans);
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;
     return ans;
 }
 
-static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
+void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
     if (current_length % CHUNK_SIZE == 0) {
         return realloc(ptr, ptr_size * (current_length + CHUNK_SIZE));
     }
@@ -195,42 +195,43 @@ static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length)
  *     4. Run in the terminal "afl-fuzz -i parser_test_case -o afl-output -- ./auth_server_response_parser @@"
  */
 
+/*
+int main(int argc, char ** argv){
+    FILE * fp;
+    int16_t c;
+    int size = 1000;
+    uint8_t *buffer = calloc(1,size * sizeof(*buffer));
+    if(buffer == NULL){
+        return 1;
+    }
+    if(argc != 2){
+        return 1;
+    }
+    fp = fopen(argv[1], "r");
+    int i = 0;
+    while((c=fgetc(fp)) != EOF){
+        if(i == size){
+            size += size;
+            buffer = realloc(buffer, size * sizeof(*buffer));
+            if(buffer == NULL){
+                return 1;
+            }
+        }
+        buffer[i] = c;
+        i++;
+    }
+    buffer = realloc(buffer, i * sizeof(*buffer));
+    fclose(fp);
 
-//int main(int argc, char ** argv){
-//    FILE * fp;
-//    int16_t c;
-//    int size = 1000;
-//    uint8_t *buffer = calloc(1,size * sizeof(*buffer));
-//    if(buffer == NULL){
-//        return 1;
-//    }
-//    if(argc != 2){
-//        return 1;
-//    }
-//    fp = fopen(argv[1], "r");
-//    int i = 0;
-//    while((c=fgetc(fp)) != EOF){
-//        if(i == size){
-//            size += size;
-//            buffer = realloc(buffer, size * sizeof(*buffer));
-//            if(buffer == NULL){
-//                return 1;
-//            }
-//        }
-//        buffer[i] = c;
-//        i++;
-//    }
-//    buffer = realloc(buffer, i * sizeof(*buffer));
-//    fclose(fp);
-//
-//    struct vars * ans = get_vars_parser(buffer, i);
-//    free(buffer);
-//    if(ans->error != NO_ERROR){
-//        printf("error\n");
-//    } else {
-//        printf("IO Timeout = %zu\n", ans->io_timeout);
-//        printf("Logger Severity = %u\n", ans->lmode);
-//    }
-//    free_vars(ans);
-//    return 0;
-//}
+    struct vars * ans = get_vars_parser(buffer, i);
+    free(buffer);
+    if(ans->error != NO_ERROR){
+        printf("error\n");
+    } else {
+        printf("IO Timeout = %zu\n", ans->io_timeout);
+        printf("Logger Severity = %u\n", ans->lmode);
+    }
+    free_vars(ans);
+    return 0;
+}
+*/

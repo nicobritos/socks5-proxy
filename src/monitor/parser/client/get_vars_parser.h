@@ -23,14 +23,19 @@ struct vars {
     size_t io_timeout;
     logger_severity_mode lmode;
     parser_error_t error;
+    struct parser *parser;
+    size_t message_length;
+    int finished;
 };
+
+struct vars * get_vars_parser_init();
 
 /**
  * Dado un datagrama (array de bytes) de respuesta del comando GET USERS (ver RFC) para el proxy
  * y su longitud, parsea el datagrama.
  * Si no cumple con el RFC devuelve INVALID_INPUT_FORMAT_ERROR en el campo de error de la estructura.
  */
-struct vars * get_vars_parser(uint8_t *s, size_t length);
+struct vars * get_vars_parser_consume(uint8_t *s, size_t length, struct vars * ans);
 
 /**
  * Libera la memoria utilizada por la estructura, si metrics es NULL, no hace nada

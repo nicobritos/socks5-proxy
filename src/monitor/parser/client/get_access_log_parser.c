@@ -706,15 +706,9 @@ static struct parser_definition definition = {
         .start_state  = ST_YEAR_1,
 };
 
-struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
+struct access_log * get_access_log_parser_init(){
     struct access_log * ans = calloc(1, sizeof(*ans));
-    struct parser *parser = parser_init(parser_no_classes(), &definition);
-    size_t current_time_length = 0;
-    size_t current_user_length = 0;
-    size_t current_oip_length = 0;
-    size_t current_destination_length = 0;
-    parser_error_t ans_error = NO_ERROR;
-    int finished = 0;
+    ans->parser = parser_init(parser_no_classes(), &definition);
     ans->entries = resize_if_needed(ans->entries, sizeof(*ans->entries), ans->entry_qty);
     ans->entries[ans->entry_qty].time = NULL;
     ans->entries[ans->entry_qty].user.user = NULL;
@@ -722,39 +716,42 @@ struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
     ans->entries[ans->entry_qty].destination = NULL;
     ans->entries[ans->entry_qty].origin_port = 0;
     ans->entries[ans->entry_qty].destination_port = 0;
+    ans->finished = 0;
+    return ans;
+}
+
+struct access_log * get_access_log_parser_consume(uint8_t *s, size_t length, struct access_log * ans) {
+    parser_error_t ans_error = NO_ERROR;
     for (size_t i = 0; i<length; i++) {
-        const struct parser_event* ret = parser_feed(parser, s[i]);
+        const struct parser_event* ret = parser_feed(ans->parser, s[i]);
         switch (ret->type) {
             case COPY_TIME:
-                ans_error = add_to_string(&(ans->entries[ans->entry_qty].time), s[i], &current_time_length);
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].time), s[i], &(ans->current_time_length));
                 if(ans_error != NO_ERROR){
                     if(ans->entries[ans->entry_qty].time != NULL){
                         free(ans->entries[ans->entry_qty].time);
                     }
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
             case COPY_USER:
-                ans_error = add_to_string(&(ans->entries[ans->entry_qty].user.user), s[i], &current_user_length);
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].user.user), s[i], &(ans->current_user_length));
                 if(ans_error != NO_ERROR){
                     if(ans->entries[ans->entry_qty].user.user != NULL){
                         free(ans->entries[ans->entry_qty].time);
                         free(ans->entries[ans->entry_qty].user.user);
                     }
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
             case COPY_OIP:
-                ans_error = add_to_string(&(ans->entries[ans->entry_qty].origin_ip), s[i], &current_oip_length);
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].origin_ip), s[i], &(ans->current_oip_length));
                 if(ans_error != NO_ERROR){
                     if(ans->entries[ans->entry_qty].origin_ip != NULL){
                         free(ans->entries[ans->entry_qty].time);
                         free(ans->entries[ans->entry_qty].user.user);
                         free(ans->entries[ans->entry_qty].origin_ip);
                     }
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
@@ -763,7 +760,7 @@ struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
                 ans->entries[ans->entry_qty].origin_port += s[i] - '0';
             break;
             case COPY_DESTINATION:
-                ans_error = add_to_string(&(ans->entries[ans->entry_qty].destination), s[i], &current_destination_length);
+                ans_error = add_to_string(&(ans->entries[ans->entry_qty].destination), s[i], &(ans->current_destination_length));
                 if(ans_error != NO_ERROR){
                     if(ans->entries[ans->entry_qty].destination != NULL){
                         free(ans->entries[ans->entry_qty].time);
@@ -771,7 +768,6 @@ struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
                         free(ans->entries[ans->entry_qty].origin_ip);
                         free(ans->entries[ans->entry_qty].destination);
                     }
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
@@ -783,10 +779,10 @@ struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
                 ans->entries[ans->entry_qty].user.status = s[i];
             break;
             case END_ENTRY_T:
-                current_time_length = 0;
-                current_user_length = 0;
-                current_oip_length = 0;
-                current_destination_length = 0;
+                ans->current_time_length = 0;
+                ans->current_user_length = 0;
+                ans->current_oip_length = 0;
+                ans->current_destination_length = 0;
                 (ans->entry_qty)++;
                 ans->entries = resize_if_needed(ans->entries, sizeof(*ans->entries), ans->entry_qty);
                 ans->entries[ans->entry_qty].time = NULL;
@@ -799,10 +795,10 @@ struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
             case END_T:
                 ans->entries = realloc(ans->entries, sizeof(*(ans->entries)) * ans->entry_qty);
                 if(ans->entries == NULL){
-                    parser_destroy(parser);
+                    parser_destroy(ans->parser);
                     return error(ans, REALLOC_ERROR);
                 }
-                finished = 1;
+                ans->finished = 1;
             break;
             case INVALID_INPUT_FORMAT_T:
                 if(ans->entries[ans->entry_qty].time != NULL){
@@ -817,19 +813,13 @@ struct access_log * get_access_log_parser(uint8_t *s, size_t length) {
                         }
                     }
                 }
-                parser_destroy(parser);
                 return error(ans, INVALID_INPUT_FORMAT_ERROR);
         }
     }
-    if(!finished){
-        parser_destroy(parser);
-        return error(ans, INVALID_INPUT_FORMAT_ERROR);
-    }
-    parser_destroy(parser);
     return ans;
 }
 
-void free_access_log(struct access_log *access_log) {
+void free_access_log(struct access_log * access_log) {
     if (access_log != NULL) {
         if(access_log->entries != NULL){
             for(int i = 0; i<access_log->entry_qty; i++){
@@ -839,6 +829,10 @@ void free_access_log(struct access_log *access_log) {
                 free(access_log->entries[i].destination);
             }
             free(access_log->entries);
+        }
+        if(access_log->parser != NULL){
+            parser_destroy(access_log->parser);
+            access_log->parser = NULL;
         }
         free(access_log);
     }
@@ -904,7 +898,8 @@ int main(int argc, char ** argv){
     buffer = realloc(buffer, i * sizeof(*buffer));
     fclose(fp);
 
-    struct access_log * ans = get_access_log_parser(buffer, i);
+    struct access_log * ans = get_access_log_parser_init();
+    ans = get_access_log_parser_consume(buffer, i, ans);
     free(buffer);
     if(ans->error != NO_ERROR){
         printf("error\n");
