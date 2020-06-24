@@ -1,7 +1,6 @@
 #ifndef GET_VARS_PARSER_H_
 #define GET_VARS_PARSER_H_
 
-
 /**
  * get_vars_parser.c -- parser de la respuesta del comando GET VARS (ver RFC)
  *
@@ -11,17 +10,10 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "../parser_errors.h"
-
-typedef enum{
-    DEBUG,
-    INFO,
-    WARNING,
-    ERROR,
-} logger_severity_mode;
+#include "../../../utils/log_helper.h"
 
 struct vars {
-    size_t io_timeout;
-    logger_severity_mode lmode;
+    enum log_severity system_lmode, socks_lmode;
     parser_error_t error;
     struct parser *parser;
     size_t message_length;

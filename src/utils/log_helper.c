@@ -43,12 +43,6 @@ static bool should_append_(log_t log, enum log_severity severity);
  */
 static void append_to_log_s(log_t log, char *s);
 
-/**
- * Devuelve la representacion en str de un severity
- * @param severity
- */
-static const char *get_severity_str_(enum log_severity severity);
-
 /** ------------- DEFINITIONS ------------- */
 /** ------------- PUBLIC ------------- */
 /**
@@ -106,6 +100,21 @@ void logger_set_log_severity(log_t log, enum log_severity severity) {
 }
 
 /**
+ * Devuelve un string que representa el severity, NULL si es invalido
+ * @param severity
+ * @return
+ */
+const char *logger_get_log_severity_str(enum log_severity severity) {
+    switch (severity) {
+        case log_severity_info: return INFO_STR;
+        case log_severity_debug: return DEBUG_STR;
+        case log_severity_error: return ERROR_STR;
+        case log_severity_warning: return WARNING_STR;
+        default: return NULL;
+    }
+}
+
+/**
  * Devuelve el severity de un log
  */
 enum log_severity logger_get_log_severity(log_t log) {
@@ -146,14 +155,14 @@ void logger_append_to_log(log_t log, enum log_severity severity, const char *s, 
     }
 
     /** Calculamos el espacio que necesitamos para el string final */
-    n = snprintf(NULL, 0, "[%s] [%s] %s\n", datetime, get_severity_str_(severity), out);
+    n = snprintf(NULL, 0, "[%s] [%s] %s\n", datetime, logger_get_log_severity_str(severity), out);
     char *out2 = malloc(sizeof(*out2) * (n + 1));
     if (out2 == NULL) {
         free(datetime);
         free(out);
         return;
     }
-    sprintf(out2, "[%s] [%s] %s\n", datetime, get_severity_str_(severity), out);
+    sprintf(out2, "[%s] [%s] %s\n", datetime, logger_get_log_severity_str(severity), out);
     free(out); // No lo vamos a usar
     free(datetime);
 
@@ -224,23 +233,4 @@ static void append_to_log_s(log_t log, char *s) {
 //    FILE *console = log == system_log ? stderr : stdout;
 //    fputs(s, console);
 //    fflush(console);
-}
-
-/**
- * Devuelve la representacion en str de un severity
- * @param severity
- */
-static const char *get_severity_str_(const enum log_severity severity) {
-    switch (severity) {
-        case log_severity_warning:
-            return WARNING_STR;
-        case log_severity_debug:
-            return DEBUG_STR;
-        case log_severity_error:
-            return ERROR_STR;
-        case log_severity_info:
-            return INFO_STR;
-        default:
-            return "";
-    }
 }

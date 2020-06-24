@@ -43,6 +43,13 @@ log_t logger_get_system_log();
 void logger_set_log_severity(log_t log, enum log_severity severity);
 
 /**
+ * Devuelve un string que representa el severity, NULL si es invalido
+ * @param severity
+ * @return
+ */
+const char *logger_get_log_severity_str(enum log_severity severity);
+
+/**
  * Devuelve el severity de un log
  */
 enum log_severity logger_get_log_severity(log_t log);

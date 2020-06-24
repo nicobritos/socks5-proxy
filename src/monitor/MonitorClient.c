@@ -26,6 +26,7 @@
 #include "parser/client/get_users_parser.h"
 #include "parser/client/get_vars_parser.h"
 #include "parser/client/get_access_log_parser.h"
+#include "../utils/log_helper.h"
 
 #include "../configuration.h"
 
@@ -95,7 +96,7 @@ int main(int argc, char *argv[]) {
 
     start_connection(argc, argv);
 
-    while (1) {
+    while (!done) {
         if (!logged) {
             login();
         } else {
@@ -312,7 +313,7 @@ static void get_metrics() {
     uint8_t answer[ANSWER_MAX_LENGTH];
 
     struct metrics *ans = get_metrics_parser_init();
-    while (!ans->finished) {
+    while (!ans->finished && !done) {
         int ret = sctp_recvmsg(sd, answer, sizeof(uint8_t) * ANSWER_MAX_LENGTH, (struct sockaddr *) NULL, 0,
                                &sndrcvinfo, &flags);
         if (ret == -1) {
@@ -335,7 +336,7 @@ static void get_metrics() {
         printf("Total bytes transferred: %lu\n", ans->bytes_transferred);
     }
 
-    // free_metrics(ans);
+     free_metrics(ans);
 }
 
 static void get_users() {
@@ -351,7 +352,7 @@ static void get_users() {
     uint8_t answer[ANSWER_MAX_LENGTH];
 
     struct users *ans = get_users_parser_init();
-    while (!ans->finished) {
+    while (!ans->finished && !done) {
         int ret = sctp_recvmsg(sd, answer, sizeof(uint8_t) * ANSWER_MAX_LENGTH, (struct sockaddr *) NULL, 0,
                                &sndrcvinfo, &flags);
         if (ret == -1) {
@@ -371,7 +372,7 @@ static void get_users() {
 
         printf("Username: %s\tStatus: %u\n", ans->users->user, ans->users->status);
     }
-    // free_user(ans);
+     free_users(ans);
 }
 
 static void get_access_log() {
@@ -384,39 +385,42 @@ static void get_access_log() {
     +----------+----------+-------+----------+----------+----------+----------+----------+
     */
 
-     uint8_t answer[ANSWER_MAX_LENGTH];
+    uint8_t answer[ANSWER_MAX_LENGTH];
 
-     struct access_log * ans = get_access_log_parser_init();
-     while(!ans->finished){
-         int ret = sctp_recvmsg (sd, answer, sizeof(uint8_t) * ANSWER_MAX_LENGTH,(struct sockaddr *) NULL, 0,&sndrcvinfo, &flags);
-         if(ret == -1){
-             printf("Error receiving users information\n");
-             break;
-         }
-         if (ret == 0) {
-             printf("No information available\n");
-             break;
-         }
+    struct access_log *ans = get_access_log_parser_init();
 
-         ans = get_access_log_parser_consume(answer,ret,ans);
-         if(ans->error != NO_ERROR){
-             printf("Error parsing users information\n");
-             abort();
-         }
+    while (!ans->finished && !done) {
+        int ret = sctp_recvmsg(sd, answer, sizeof(uint8_t) * ANSWER_MAX_LENGTH, (struct sockaddr *) NULL, 0,
+                               &sndrcvinfo, &flags);
+        if (ret == -1) {
+            printf("Error receiving users information\n");
+            break;
+        }
+        if (ret == 0) {
+            printf("No information available\n");
+            break;
+        }
 
-         printf("%zu entries:\n", ans->entry_qty);
-         for(size_t i = 0; i<ans->entry_qty; i++){
-             printf("\nEntry %zu\n", i + 1);
-             printf("\tTime: %s\n",ans->entries[i].time);
-             printf("\tUser: %s\n",ans->entries[i].user.user);
-             printf("\tOrigin IP: %s\n",ans->entries[i].origin_ip);
-             printf("\tOrigin port: %d\n",ans->entries[i].origin_port);
-             printf("\tDestination: %s\n",ans->entries[i].destination);
-             printf("\tDestination port: %d\n",ans->entries[i].destination_port);
-             printf("\tStatus: %u\n",ans->entries[i].user.status);
-         }
-     }
-//     free_user(ans);
+        ans = get_access_log_parser_consume(answer, ret, ans);
+        if (ans->error != NO_ERROR) {
+            printf("Error parsing users information\n");
+            abort();
+        }
+
+        printf("%zu entries:\n", ans->entry_qty);
+        for (size_t i = 0; i < ans->entry_qty; i++) {
+            printf("\nEntry %zu\n", i + 1);
+            printf("\tTime: %s\n", ans->entries[i].time);
+            printf("\tUser: %s\n", ans->entries[i].user.user);
+            printf("\tOrigin IP: %s\n", ans->entries[i].origin_ip);
+            printf("\tOrigin port: %d\n", ans->entries[i].origin_port);
+            printf("\tDestination: %s\n", ans->entries[i].destination);
+            printf("\tDestination port: %d\n", ans->entries[i].destination_port);
+            printf("\tStatus: %u\n", ans->entries[i].user.status);
+        }
+    }
+
+    free_access_log(ans);
 }
 
 static void get_passwords(uint8_t *response, int length) {
@@ -432,7 +436,7 @@ static void get_passwords(uint8_t *response, int length) {
     uint8_t answer[ANSWER_MAX_LENGTH];
 
     struct passwords *ans = get_passwords_parser_init();
-    while (!ans->finished) {
+    while (!ans->finished && !done) {
         int ret = sctp_recvmsg(sd, answer, sizeof(uint8_t) * ANSWER_MAX_LENGTH, (struct sockaddr *) NULL, 0,
                                &sndrcvinfo, &flags);
         if (ret == -1) {
@@ -462,8 +466,8 @@ static void get_passwords(uint8_t *response, int length) {
             printf("\tPassword: %s\n", ans->entries[i].password);
         }
     }
-    // free_passwords(ans);
 
+     free_passwords(ans);
 }
 
 static void get_vars(uint8_t *response, int length) {
@@ -479,11 +483,11 @@ static void get_vars(uint8_t *response, int length) {
     uint8_t answer[ANSWER_MAX_LENGTH];
 
     struct vars *ans = get_vars_parser_init();
-    while (!ans->finished) {
+    while (!ans->finished && !done) {
         int ret = sctp_recvmsg(sd, answer, sizeof(uint8_t) * ANSWER_MAX_LENGTH, (struct sockaddr *) NULL, 0,
                                &sndrcvinfo, &flags);
         if (ret == -1) {
-            printf("Error receiving users information\n");
+            printf("Error receiving vars information\n");
             break;
         }
         if (ret == 0) {
@@ -493,14 +497,14 @@ static void get_vars(uint8_t *response, int length) {
 
         ans = get_vars_parser_consume(answer, ret, ans);
         if (ans->error != NO_ERROR) {
-            printf("Error parsing users information\n");
+            printf("Error parsing vars information\n");
             abort();
         }
 
-        printf("IO Timeout = %zu\n", ans->io_timeout);
-        printf("Logger Severity = %u\n", ans->lmode);
+        printf("SYSTEM Logger Severity = %s\n", logger_get_log_severity_str(ans->system_lmode));
+        printf("SOCKS Logger Severity = %s\n", logger_get_log_severity_str(ans->socks_lmode));
     }
-    // free_vars(ans);  
+     free_vars(ans);
 }
 
 static void set_user() {
@@ -559,7 +563,6 @@ static void set_user() {
         strcpy((char *) datagram + (2 + ulen), password);
         datagram[datalen - 1] = ret;
 
-        int ret;
         ret = sctp_sendmsg(sd, (void *) datagram, (size_t) datalen, NULL, 0, 0, 0, 0, 0, 0);
 
         if (ret == -1) {

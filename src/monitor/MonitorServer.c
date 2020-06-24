@@ -38,9 +38,9 @@
 #define LOG_SEVERITY_WARNING 3
 #define LOG_SEVERITY_INFO 2
 #define LOG_SEVERITY_DEBUG 1
+#define LOG_SEVERITY_INVALID 0xFF
 
 #define METRICS_RESPONSE_SIZE 24
-#define VARS_RESPONSE_SIZE 3
 
 /** maquina de estados general */
 enum monitor_state {
@@ -182,6 +182,8 @@ static bool write_buffer_password(const monitor_t m);
 static bool write_buffer_users(const monitor_t m);
 
 static bool write_buffer_vars(const monitor_t m);
+
+static uint8_t get_log_n(enum log_severity severity);
 
 //static bool authenticate_user(char *buffer);
 //static void sign_in(char *buffer);
@@ -731,44 +733,49 @@ static bool write_buffer_vars(const monitor_t m) {
     if (m->sent) return false;
 
     size_t n;
-    uint8_t *buff = buffer_write_ptr(&m->write_buffer, &n);
-    if (n < VARS_RESPONSE_SIZE)
+    char *b = (char *) buffer_write_ptr(&m->write_buffer, &n);
+    // Tenemos que ver primero cuanto espacio necesitamos
+    // Uso el caracter '.' como separador de strings, representa
+    // el NULL en el RFC
+    size_t space_needed = snprintf(
+            NULL,
+            0,
+            "%d%d.%d%d..",
+            VAR_SYSTEM_LOG,
+            log_severity_info,
+            VAR_SOCKS_LOG,
+            log_severity_info);
+    if (n < space_needed)
         return false;
 
-    buffer_write_adv(&m->write_buffer, VARS_RESPONSE_SIZE);
+    size_t i = 0;
+    b[i++] = VAR_SYSTEM_LOG;
+    i += sprintf(b + i, "%d", get_log_n(logger_get_log_severity(logger_get_system_log())));
+    i += 1; // sprintf copia null
+    b[i++] = VAR_SOCKS_LOG;
+    i += sprintf(b + i, "%d", get_log_n(logger_get_log_severity(socks_get_log())));
+    i += 1; // sprintf copia null
+    b[i++] = '\0'; // Otro mas significa final de vars
 
-    log_t log;
-    uint8_t log_n;
-    switch (m->command->var) {
-        case SYSTEM_LOG:
-            log = logger_get_system_log();
-            log_n = VAR_SYSTEM_LOG;
-            break;
-        case SOCKS_LOG:
-            log = socks_get_log();
-            log_n = VAR_SOCKS_LOG;
-            break;
-    }
-
-    buff[0] = log_n;
-    switch (logger_get_log_severity(log)) {
-        case log_severity_error:
-            buff[1] = LOG_SEVERITY_ERROR + '0';
-            break;
-        case log_severity_warning:
-            buff[1] = LOG_SEVERITY_WARNING + '0';
-            break;
-        case log_severity_debug:
-            buff[1] = LOG_SEVERITY_DEBUG + '0';
-            break;
-        case log_severity_info:
-            buff[1] = LOG_SEVERITY_INFO + '0';
-            break;
-    }
-    buff[2] = '\0';
+    buffer_write_adv(&m->write_buffer, i);
 
     m->sent = true;
     return false;
+}
+
+static uint8_t get_log_n(enum log_severity severity) {
+    switch (severity) {
+        case log_severity_error:
+            return LOG_SEVERITY_ERROR;
+        case log_severity_warning:
+            return LOG_SEVERITY_WARNING;
+        case log_severity_debug:
+            return LOG_SEVERITY_DEBUG;
+        case log_severity_info:
+            return LOG_SEVERITY_INFO;
+        default:
+            return LOG_SEVERITY_INVALID;
+    }
 }
 
 

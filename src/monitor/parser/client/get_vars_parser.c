@@ -5,16 +5,22 @@
 #include "get_vars_parser.h"
 
 #define CHUNK_SIZE 10
+#define LOG_SEVERITY_ERROR 4
+#define LOG_SEVERITY_WARNING 3
+#define LOG_SEVERITY_INFO 2
+#define LOG_SEVERITY_DEBUG 1
 
 /* Funciones auxiliares */
 static struct vars *error(struct vars *ans, parser_error_t error_type);
+
+static enum log_severity get_log_enum(uint8_t n);
 
 // definición de maquina
 
 enum states {
     ST_VCODE,
-    ST_IO_TIMEOUT_VALUE,
-    ST_LMODE_VALUE,
+    ST_SYSTEM_LMODE_VALUE,
+    ST_SOCKS_LMODE_VALUE,
     ST_LMODE_END,
     ST_END,
     ST_INVALID_INPUT_FORMAT,
@@ -22,8 +28,8 @@ enum states {
 
 enum event_type {
     SUCCESS,
-    COPY_IO_TIMEOUT,
-    COPY_LMODE,
+    COPY_SYSTEM_LMODE,
+    COPY_SOCKS_LMODE,
     END_T,
     INVALID_INPUT_FORMAT_T,
 };
@@ -36,15 +42,8 @@ next_state(struct parser_event *ret, const uint8_t c) {
 }
 
 static void
-copy_io_timeout(struct parser_event *ret, const uint8_t c) {
-    ret->type = COPY_IO_TIMEOUT;
-    ret->n = 1;
-    ret->data[0] = c;
-}
-
-static void
 copy_lmode(struct parser_event *ret, const uint8_t c) {
-    ret->type = COPY_LMODE;
+    ret->type = COPY_SYSTEM_LMODE;
     ret->n = 1;
     ret->data[0] = c;
 }
@@ -64,34 +63,28 @@ invalid_input(struct parser_event *ret, const uint8_t c) {
 }
 
 static const struct parser_state_transition VCODE[] = {
-    {.when = '\0', .dest = ST_END, .act1 = end,},
-    {.when = '\1', .dest = ST_IO_TIMEOUT_VALUE, .act1 = next_state,},
-    {.when = '\2', .dest = ST_LMODE_VALUE, .act1 = next_state,},
-    {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
+        {.when = '\0', .dest = ST_END, .act1 = end,},
+        {.when = '\2', .dest = ST_SYSTEM_LMODE_VALUE, .act1 = next_state,},
+        {.when = '\3', .dest = ST_SOCKS_LMODE_VALUE, .act1 = next_state,},
+        {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
 
-static const struct parser_state_transition IO_TIMEOUT_VALUE[] = {
-    {.when = '\0', .dest = ST_VCODE, .act1 = next_state,},
-    {.when = '0', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
-    {.when = '1', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
-    {.when = '2', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
-    {.when = '3', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
-    {.when = '4', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
-    {.when = '5', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
-    {.when = '6', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
-    {.when = '7', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
-    {.when = '8', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
-    {.when = '9', .dest = ST_IO_TIMEOUT_VALUE, .act1 = copy_io_timeout,},
-    {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
+static const struct parser_state_transition SYSTEM_LMODE_VALUE[] = {
+        {.when = '\0', .dest = ST_VCODE, .act1 = next_state,},
+        {.when = '1', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+        {.when = '2', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+        {.when = '3', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+        {.when = '4', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+        {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
 
-static const struct parser_state_transition LMODE_VALUE[] = {
-    {.when = '\0', .dest = ST_VCODE, .act1 = next_state,},
-    {.when = '1', .dest = ST_LMODE_END, .act1 = copy_lmode,},
-    {.when = '2', .dest = ST_LMODE_END, .act1 = copy_lmode,},
-    {.when = '3', .dest = ST_LMODE_END, .act1 = copy_lmode,},
-    {.when = '4', .dest = ST_LMODE_END, .act1 = copy_lmode,},
-    {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
+static const struct parser_state_transition SOCKS_LMODE_VALUE[] = {
+        {.when = '\0', .dest = ST_VCODE, .act1 = next_state,},
+        {.when = '1', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+        {.when = '2', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+        {.when = '3', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+        {.when = '4', .dest = ST_LMODE_END, .act1 = copy_lmode,},
+        {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
 
 static const struct parser_state_transition LMODE_END[] = {
@@ -108,20 +101,20 @@ static const struct parser_state_transition INVALID_INPUT_FORMAT[] = {
 };
 
 static const struct parser_state_transition *states[] = {
-    VCODE,
-    IO_TIMEOUT_VALUE,
-    LMODE_VALUE,
-    LMODE_END,
-    END,
-    INVALID_INPUT_FORMAT,
+        VCODE,
+        SYSTEM_LMODE_VALUE,
+        SOCKS_LMODE_VALUE,
+        LMODE_END,
+        END,
+        INVALID_INPUT_FORMAT,
 };
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
 static const size_t states_n[] = {
     N(VCODE),
-    N(IO_TIMEOUT_VALUE),
-    N(LMODE_VALUE),
+    N(SYSTEM_LMODE_VALUE),
+    N(SOCKS_LMODE_VALUE),
     N(LMODE_END),
     N(END),
     N(INVALID_INPUT_FORMAT),
@@ -145,13 +138,12 @@ struct vars * get_vars_parser_consume(uint8_t *s, size_t length, struct vars * a
     for (size_t i = 0; i<length; i++) {
         const struct parser_event* ret = parser_feed(ans->parser, s[i]);
         switch (ret->type) {
-            case COPY_IO_TIMEOUT:
-                ans->io_timeout *= 10;
-                ans->io_timeout += s[i] - '0';
-            break;
-            case COPY_LMODE:
-                ans->lmode += s[i] - '0';
-            break;
+            case COPY_SYSTEM_LMODE:
+                ans->system_lmode = get_log_enum(s[i] - '0');
+                break;
+            case COPY_SOCKS_LMODE:
+                ans->socks_lmode = get_log_enum(s[i] - '0');
+                break;
             case END_T:
                 ans->finished = 1;
             break;
@@ -177,6 +169,16 @@ static struct vars *error(struct vars *ans, parser_error_t error_type) {
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;
     return ans;
+}
+
+static enum log_severity get_log_enum(uint8_t n) {
+    switch (n) {
+        case LOG_SEVERITY_INFO: return log_severity_info;
+        case LOG_SEVERITY_DEBUG: return log_severity_debug;
+        case LOG_SEVERITY_ERROR: return log_severity_error;
+        case LOG_SEVERITY_WARNING: return log_severity_warning;
+        default: return 0;
+    }
 }
 
 /** 
