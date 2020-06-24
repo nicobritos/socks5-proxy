@@ -72,6 +72,8 @@ static void get_passwords();
 
 static void get_vars();
 
+static void establish_connection();
+
 
 
 int main(int argc, char* argv[]){
@@ -143,15 +145,17 @@ static bool authenticate_user(const char *username, const char *password){
     +--------+----------+
     */
 
-    struct auth_response * ans = auth_response_parser(answer, ret);
-    if(ans->error != 0){
-        printf("Error\n");
+    struct auth_response * ans = auth_response_parser_init();
+    ans = auth_response_parser_consume(answer, ret, ans);
+    if(ans->error != NO_ERROR){
+        printf("error\n");
     } else {
         printf("%s\n", ans->message);
         if(ans->status == 0x01){
             return true;
         }
     }
+    // auth_response_free(ans);
     return false;
 }
 
