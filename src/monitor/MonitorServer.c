@@ -187,10 +187,8 @@ static void read_close(unsigned state, struct selector_key *key);
 /** ---------------- WRITE ---------------- */
 static unsigned write_do(struct selector_key *key);
 
-static void write_close(unsigned state, struct selector_key *key);
-
 /** ---------------- AUX ---------------- */
-static bool write_response_buffer(const monitor_t m);
+static bool write_response_buffer(const monitor_t m, uint8_t *ret);
 
 static bool write_buffer_metrics(const monitor_t m);
 
@@ -229,7 +227,6 @@ static const struct state_definition client_statbl[] = {
         },
         {
                 .state = WRITE,
-                .on_departure     = write_close,
                 .on_write_ready   = write_do,
         },
         {
@@ -399,17 +396,17 @@ static unsigned hello_read_do(struct selector_key *key) {
     size_t count;
     ssize_t n;
 
-    if (m->command == NULL)
+    if (m->credentials == NULL)
         return ERROR;
 
     ptr = buffer_write_ptr(&m->read_buffer, &count);
     n = sctp_recvmsg(key->fd, ptr, count, (struct sockaddr *) NULL, 0, &m->sndrcvinfo, 0);
     if (n > 0) {
         buffer_write_adv(&m->read_buffer, n);
-        m->command = command_request_parser_consume(ptr, n, m->command);
-        if (m->command == NULL)
+        m->credentials = proxy_credentials_parser_consume(ptr, n, m->credentials);
+        if (m->credentials == NULL)
             return ERROR;
-        if (m->command->error != NO_ERROR)
+        if (m->credentials->error != NO_ERROR)
             return ERROR;
         if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
             hello_write_response_buffer(m);
@@ -456,10 +453,15 @@ static unsigned hello_write_do(struct selector_key *key) {
     } else {
         buffer_read_adv(&m->write_buffer, n);
         if (!buffer_can_read(&m->write_buffer)) {
-            if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
-                ret = READ;
+            if (!m->logged) {
+                selector_set_interest_key(key, OP_READ);
+                ret = HELLO_READ;
             } else {
-                ret = ERROR;
+                if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
+                    ret = READ;
+                } else {
+                    ret = ERROR;
+                }
             }
         }
     }
@@ -497,9 +499,10 @@ static unsigned read_do(struct selector_key *key) {
         if (m->command->error != NO_ERROR)
             return ERROR;
         // Como los requests pesan poco supongo que llega entero
-        if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
-            write_response_buffer(m);
-            return WRITE;
+        uint8_t ret;
+        write_response_buffer(m, &ret);
+        if (SELECTOR_SUCCESS == selector_set_interest_key(key, ret == READ ? OP_READ : OP_WRITE)) {
+            return ret;
         } else {
             return ERROR;
         }
@@ -521,7 +524,8 @@ static void read_close(unsigned state, struct selector_key *key) {
  * @param m
  * @return
  */
-static bool write_response_buffer(const monitor_t m) {
+static bool write_response_buffer(const monitor_t m, uint8_t *ret) {
+    if (ret != NULL) *ret = WRITE;
     if (m->command == NULL) return false;
 
     switch (m->command->code) {
@@ -537,9 +541,11 @@ static bool write_response_buffer(const monitor_t m) {
             return write_buffer_vars(m);
         case SET_USER:
             set_user(m);
+            if (ret != NULL) *ret = READ;
             return false;
         case SET_VAR:
             set_var(m);
+            if (ret != NULL) *ret = READ;
             return false;
         default:
             return false;
@@ -560,7 +566,7 @@ static unsigned write_do(struct selector_key *key) {
     } else {
         buffer_read_adv(&m->write_buffer, n);
         if (!buffer_can_read(&m->write_buffer)) {
-            if (write_response_buffer(m)) {
+            if (write_response_buffer(m, NULL)) {
                 ret = WRITE;
             } else {
                 if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
@@ -573,10 +579,6 @@ static unsigned write_do(struct selector_key *key) {
     }
 
     return ret;
-}
-
-static void write_close(unsigned state, struct selector_key *key) {
-//    hello_parser_close(&d->parser);
 }
 
 

@@ -48,10 +48,8 @@ static int sd = -1, rc;
 static char *address = "127.0.0.1";
 static uint16_t port = 8080;
 static struct sockaddr_storage res;
-static bool logged = true;
+static bool logged = false;
 static char buffer[MAX_BUFFER];
-static char *username;
-static char *password;
 struct sctp_sndrcvinfo sndrcvinfo;
 int flags;
 
@@ -136,7 +134,7 @@ static bool authenticate_user(const char *username, const char *password) {
     +-----+----------+----------+
     */
 
-    const int DATAGRAM_MAX_LENGTH = (1 + 2 * 255);
+    const int DATAGRAM_MAX_LENGTH = (1 + 2 * (255 + 1));
     uint8_t datagram[DATAGRAM_MAX_LENGTH];
 
     const uint8_t ver = 0x01;
@@ -173,11 +171,12 @@ static bool authenticate_user(const char *username, const char *password) {
     } else {
         printf("%s\n", ans->message);
         if (ans->status == 0x01) {
+            auth_response_free(ans);
             return true;
         }
     }
 
-    // auth_response_free(ans);
+    auth_response_free(ans);
     return false;
 }
 
@@ -668,6 +667,4 @@ static void get_menu_option() {
 
 static void finish_connection() {
     free(address);
-    free(username);
-    free(password);
 }
