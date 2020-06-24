@@ -1280,6 +1280,16 @@ static void log_request(const struct selector_key *key, const struct request_par
         access_log.last = node;
     }
 
+    fprintf(stdout,
+            "%s\t%s\tA\t%s\t%s\t%s\t%s\t%d\n",
+            node->details.datetime,
+            node->details.username,
+            node->details.origin.ip,
+            node->details.origin.port,
+            node->details.destination.name,
+            node->details.destination.port,
+            node->details.status)
+
     file_log:
     if (logger != NULL) {
         char ip_buffer_client[INET6_ADDRSTRLEN];
