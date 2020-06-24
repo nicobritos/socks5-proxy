@@ -3,7 +3,7 @@ project(PC-2020A-6-TPE.SOCKSV5)
 project(monitor_client)
 
 set(CMAKE_C STANDARD 11)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic -Wall -Wextra -Werror -std=c11 -Wno-unused-parameter -D_POSIX_C_SOURCE=200112L -fsanitize=address -g -D_GNU_SOURCE")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic -Wall -Wextra -Werror -std=c11 -Wno-unused-parameter -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE")
 
 
 set(SOURCE_FILES
