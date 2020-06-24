@@ -196,6 +196,9 @@ static enum log_severity get_log_severity(uint8_t n);
 /** ---------------- MONITOR HANDLERS ---------------- */
 static const struct state_definition client_statbl[] = {
         {
+            .state =
+        },
+        {
                 .state            = READ,
                 .on_arrival       = read_init,
                 .on_departure     = read_close,
@@ -826,16 +829,6 @@ static enum log_severity get_log_severity(uint8_t n) {
         default: return log_severity_error;
     }
 }
-
-
-//
-//static bool authenticate_user(char *buffer) {
-//
-//}
-
-//static void sign_in(char *buffer) {
-//
-//}
 
 
 
