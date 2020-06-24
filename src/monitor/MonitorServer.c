@@ -394,6 +394,8 @@ static void write_init(unsigned state, struct selector_key *key) {
  * @return
  */
 static bool write_response_buffer(const monitor_t m) {
+    if (m->command == NULL) return false;
+
     switch (m->command->code) {
         case GET_METRICS:
             return write_buffer_metrics(m);
