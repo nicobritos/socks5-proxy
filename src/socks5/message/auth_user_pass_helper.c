@@ -144,6 +144,28 @@ enum auth_user_pass_helper_status auth_user_pass_helper_set_enable(const char *u
 }
 
 /**
+ * Remueve las credenciales asociadas a un usuario y lo guarda en el archivo
+ * @param username del usuario al cual sacar
+ * @return auth_user_pass_helper_status_... acorde al resultado
+ */
+enum auth_user_pass_helper_status auth_user_pass_helper_remove(const char *username) {
+    if (credentials_map == NULL) return auth_user_pass_helper_status_error_not_initialized;
+    if (username == NULL || *username == '\0') return auth_user_pass_helper_status_error_invalid_credentials;
+
+    struct auth_user_pass_credentials credentials = {
+            .username = (char *)username,
+            .username_length = strlen(username),
+            .password = NULL
+    };
+    sorted_hashmap_node node = sorted_hashmap_find(credentials_map, (void*) &credentials);
+    if (node == NULL)
+        return auth_user_pass_helper_status_error_user_not_found;
+
+    sorted_hashmap_remove(credentials_map, node);
+    return auth_user_pass_helper_status_ok;
+}
+
+/**
  * Verifica que el usuario exista y que la contrasena sea correcta
  * @param credentials
  * @return bool

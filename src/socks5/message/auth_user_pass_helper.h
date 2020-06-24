@@ -51,6 +51,13 @@ enum auth_user_pass_helper_status auth_user_pass_helper_update_password(const st
 enum auth_user_pass_helper_status auth_user_pass_helper_set_enable(const char *username, bool enable);
 
 /**
+ * Remueve las credenciales asociadas a un usuario y lo guarda en el archivo
+ * @param username del usuario al cual sacar
+ * @return auth_user_pass_helper_status_... acorde al resultado
+ */
+enum auth_user_pass_helper_status auth_user_pass_helper_remove(const char *username);
+
+/**
  * Verifica que el usuario exista y que la contrasena sea correcta
  * @param credentials
  * @return bool

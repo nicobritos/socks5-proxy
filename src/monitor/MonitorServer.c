@@ -38,7 +38,6 @@
 #define LOG_SEVERITY_WARNING 3
 #define LOG_SEVERITY_INFO 2
 #define LOG_SEVERITY_DEBUG 1
-#define LOG_SEVERITY_INVALID 0xFF
 
 #define METRICS_RESPONSE_SIZE 24
 
@@ -183,7 +182,13 @@ static bool write_buffer_users(const monitor_t m);
 
 static bool write_buffer_vars(const monitor_t m);
 
+static void set_user(const monitor_t m);
+
+static void set_var(const monitor_t m);
+
 static uint8_t get_log_n(enum log_severity severity);
+
+static enum log_severity get_log_severity(uint8_t n);
 
 //static bool authenticate_user(char *buffer);
 //static void sign_in(char *buffer);
@@ -431,9 +436,11 @@ static bool write_response_buffer(const monitor_t m) {
         case GET_VARS:
             return write_buffer_vars(m);
         case SET_USER:
-//            break; // TODO
+            set_user(m);
+            return false;
         case SET_VAR:
-//            break;
+            set_var(m);
+            return false;
         default:
             return false;
     }
@@ -763,18 +770,60 @@ static bool write_buffer_vars(const monitor_t m) {
     return false;
 }
 
+static void set_user(const monitor_t m) {
+    if (m->sent) return;
+
+    struct auth_user_pass_credentials credentials = {
+            .username = m->command->user,
+            .username_length = m->command->user_current_length,
+            .password = m->command->password
+    };
+    if (m->command->mode == REMOVE_USER) {
+        auth_user_pass_helper_remove(m->command->user);
+    } else {
+        enum auth_user_pass_helper_status status = auth_user_pass_helper_set_enable(m->command->user, m->command->mode == ENABLE_USER);
+        if (status == auth_user_pass_helper_status_error_user_not_found && m->command->mode == ENABLE_USER) {
+            auth_user_pass_helper_add(&credentials);
+        }
+    }
+
+    m->sent = true;
+}
+
+static void set_var(const monitor_t m) {
+    if (m->sent) return;
+    m->sent = true;
+
+    log_t log;
+    long log_mode;
+    if (m->command->var == SYSTEM_LOG) {
+        log = logger_get_system_log();
+    } else if (m->command->var == SOCKS_LOG) {
+        log = socks_get_log();
+    } else {
+        return;
+    }
+    char *end = 0;
+    log_mode = strtol((char *) m->command->var_value, &end, 10);
+
+    logger_set_log_severity(log, get_log_severity(log_mode));
+}
+
 static uint8_t get_log_n(enum log_severity severity) {
     switch (severity) {
-        case log_severity_error:
-            return LOG_SEVERITY_ERROR;
-        case log_severity_warning:
-            return LOG_SEVERITY_WARNING;
-        case log_severity_debug:
-            return LOG_SEVERITY_DEBUG;
-        case log_severity_info:
-            return LOG_SEVERITY_INFO;
-        default:
-            return LOG_SEVERITY_INVALID;
+        case log_severity_warning: return LOG_SEVERITY_WARNING;
+        case log_severity_debug: return LOG_SEVERITY_DEBUG;
+        case log_severity_info: return LOG_SEVERITY_INFO;
+        default: return LOG_SEVERITY_ERROR;
+    }
+}
+
+static enum log_severity get_log_severity(uint8_t n) {
+    switch (n) {
+        case LOG_SEVERITY_WARNING: return log_severity_warning;
+        case LOG_SEVERITY_DEBUG: return log_severity_debug;
+        case LOG_SEVERITY_INFO: return log_severity_info;
+        default: return log_severity_error;
     }
 }
 

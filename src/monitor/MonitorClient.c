@@ -41,6 +41,9 @@
 #define STATUS_ACTIVE "YES"
 #define STATUS_INACTIVE "NO"
 
+#define SET_USER_COMMAND 0x06
+#define SET_VAR_COMMAND 0x07
+
 static int sd = -1, rc;
 static char *address = "127.0.0.1";
 static uint16_t port = 8080;
@@ -515,8 +518,8 @@ static void get_vars(uint8_t *response, int length) {
 }
 
 static void set_user() {
-    char user[MAX_BUFFER];
-    char pass[MAX_BUFFER];
+    char user[MAX_BUFFER + 1];
+    char pass[MAX_BUFFER + 1];
 
     printf("\nEnter user data\n");
 
@@ -526,7 +529,7 @@ static void set_user() {
         sscanf(buffer, "%s", user);
     }
 
-    if (strlen(user) > 255) {
+    if (strlen(user) > MAX_BUFFER) {
         printf("Username must be shorter\n");
         return;
     }
@@ -554,20 +557,19 @@ static void set_user() {
     char *ptr;
     long ret;
 
-    ret = strtoul(buffer, &ptr, 10);
+    ret = (long) strtoul(buffer, &ptr, 10);
 
     if (ret == 0 || ret == 1 || ret == 2) {
-
-        int DATAGRAM_MAX_LENGTH = (1 + 2 * 255);
+        int DATAGRAM_MAX_LENGTH = (2 + 2 * (MAX_BUFFER + 1));
         uint8_t datagram[DATAGRAM_MAX_LENGTH];
 
         const uint8_t ulen = (uint8_t) strlen(user);
         const uint8_t plen = (uint8_t) strlen(pass);
-        const uint8_t datalen = 4 + ulen + plen;
+        const uint8_t datalen = 2 + ulen + 1 + plen + 1;
 
-        datagram[0] = 0x06;
-        strcpy((char *) datagram + 1, username);
-        strcpy((char *) datagram + (2 + ulen), password);
+        datagram[0] = SET_USER_COMMAND;
+        memcpy(datagram + 1, user, ulen + 1);
+        memcpy(datagram + 1 + ulen + 2, pass, plen + 1);
         datagram[datalen - 1] = ret;
 
         ret = sctp_sendmsg(sd, (void *) datagram, (size_t) datalen, NULL, 0, 0, 0, 0, 0, 0);
@@ -579,38 +581,48 @@ static void set_user() {
 }
 
 static void set_vars() {
-    printf("Log Severity: \n");
-    printf("[1] DEBUG\n");
-    printf("[2] INFO\n");
-    printf("[3] WARNING\n");
-    printf("[3] ERROR\n");
+    char *ptr;
+    long ret;
+    uint8_t logger;
 
+    printf("Select logger: \n");
+    printf("[1] SYSTEM\n");
+    printf("[2] SOCKS\n");
 
     if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
         fprintf(stderr, "Please, choose an option.\n");
         return;
     }
 
-    char *ptr;
-    long ret;
+    ret = (long) strtoul(buffer, &ptr, 10);
+    if (ret != 1 && ret != 2) return;
+    logger = ret;
 
-    ret = strtoul(buffer, &ptr, 10);
+    printf("Set log Severity: \n");
+    printf("[1] DEBUG\n");
+    printf("[2] INFO\n");
+    printf("[3] WARNING\n");
+    printf("[4] ERROR\n");
 
-    if (ret == 1 || ret == 21 || ret == 3 || ret == 4) {
+    if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
+        fprintf(stderr, "Please, choose an option.\n");
+        return;
+    }
+
+    ret = (long) strtoul(buffer, &ptr, 10);
+    if (ret == 1 || ret == 2 || ret == 3 || ret == 4) {
         int DATAGRAM_MAX_LENGTH = (3);
         uint8_t datagram[DATAGRAM_MAX_LENGTH];
-        datagram[0] = 0x07;
-        datagram[1] = 0x02;
+        datagram[0] = SET_VAR_COMMAND;
+        datagram[1] = logger;
         datagram[2] = ret;
 
-        int ret;
         ret = sctp_sendmsg(sd, (void *) datagram, (size_t) DATAGRAM_MAX_LENGTH, NULL, 0, 0, 0, 0, 0, 0);
 
         if (ret == -1) {
             printf("Error sending request\n");
         }
     }
-
 }
 
 static void get_menu_option() {
