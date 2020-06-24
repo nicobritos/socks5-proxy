@@ -92,7 +92,6 @@ usage(const char *progname) {
 void
 parse_args(const int argc, char **argv) {
     system_log = logger_get_system_log();
-    logger_append_to_log(system_log, log_severity_debug, "prueba", 0);
 
     memset(&configuration, 0, sizeof(configuration));
     struct sockaddr_in6 *socks_in6 = (struct sockaddr_in6 *) &configuration.socks5.sockaddr;
@@ -105,7 +104,7 @@ parse_args(const int argc, char **argv) {
 
     configuration.socks5.sockaddr.ss_family = DEFAULT_SOCKS_ADDR_FAMILY;
 #if (DEFAULT_SOCKS_ADDR_FAMILY == AF_INET)
-    socks_in->sin_addr.s_addr = DEFAULT_SOCKS_ADDR;
+    socks_in->sin_addr.s_addr = htonl(DEFAULT_SOCKS_ADDR);
     socks_in->sin_port = htons(DEFAULT_SOCKS_PORT);
 #elif (DEFAULT_SOCKS_ADDR_FAMILY == AF_INET6)
     socks_in6->sin6_addr = DEFAULT_SOCKS_ADDR;
@@ -117,7 +116,7 @@ parse_args(const int argc, char **argv) {
 
     configuration.monitor.sockaddr.ss_family = DEFAULT_MONITOR_ADDR_FAMILY;
 #if (DEFAULT_MONITOR_ADDR_FAMILY == AF_INET)
-    monitor_in->sin_addr.s_addr = DEFAULT_MONITOR_ADDR;
+    monitor_in->sin_addr.s_addr = htonl(DEFAULT_MONITOR_ADDR);
     monitor_in->sin_port = htons(DEFAULT_MONITOR_PORT);
 #elif (DEFAULT_MONITOR_ADDR_FAMILY == AF_INET6)
     monitor_in6->sin6_addr = DEFAULT_MONITOR_ADDR;
@@ -127,7 +126,7 @@ parse_args(const int argc, char **argv) {
 
     configuration.doh.sockaddr.ss_family = DEFAULT_DOH_ADDR_FAMILY;
 #if (DEFAULT_DOH_ADDR_FAMILY == AF_INET)
-    doh_in->sin_addr.s_addr = DEFAULT_DOH_ADDR;
+    doh_in->sin_addr.s_addr = htonl(DEFAULT_DOH_ADDR);
     doh_in->sin_port = htons(DEFAULT_DOH_PORT);
 #elif (DEFAULT_DOH_ADDR_FAMILY == AF_INET6)
     doh_in6->sin6_addr = DEFAULT_DOH_ADDR;

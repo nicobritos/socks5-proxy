@@ -158,32 +158,36 @@ main(const int argc, char **argv) {
 
     if (socks_both) {
         uint16_t port = ntohs(((struct sockaddr_in *)&configuration.socks5.sockaddr)->sin_port);
-        fprintf(stdout, "SOCKS listening on TCP port %d on IPv4 and IPv6\n", port);
 
         if (system_log != NULL) {
             logger_append_to_log(system_log, log_severity_info, "SOCKS server up with TCP port %d on IPv4 and IPv6", 1, port);
+        } else {
+            fprintf(stderr, "SOCKS listening on TCP port %d on IPv4 and IPv6\n", port);
         }
     } else {
         uint16_t port = ntohs(((struct sockaddr_in6 *)&configuration.socks5.sockaddr)->sin6_port);
-        fprintf(stdout, "SOCKS listening on TCP port %d on IPv6\n", port);
 
         if (system_log != NULL) {
             logger_append_to_log(system_log, log_severity_info, "SOCKS server up with TCP port %d on IPv6", 1, port);
+        } else {
+            fprintf(stderr, "SOCKS listening on TCP port %d on IPv6\n", port);
         }
     }
     if (monitor_both) {
         uint16_t port = ntohs(((struct sockaddr_in *)&configuration.monitor.sockaddr)->sin_port);
-        fprintf(stdout, "MONITOR listening on TCP port %d on IPv4 and IPv6\n", port);
 
         if (system_log != NULL) {
             logger_append_to_log(system_log, log_severity_info, "MONITOR server up with TCP port %d on IPv4 and IPv6", 1, port);
+        } else {
+            fprintf(stderr, "MONITOR listening on TCP port %d on IPv4 and IPv6\n", port);
         }
     } else {
         uint16_t port = ntohs(((struct sockaddr_in6 *)&configuration.monitor.sockaddr)->sin6_port);
-        fprintf(stdout, "MONITOR listening on TCP port %d on IPv6\n", port);
 
         if (system_log != NULL) {
             logger_append_to_log(system_log, log_severity_info, "MONITOR server up with TCP port %d on IPv6", 1, port);
+        } else {
+            fprintf(stderr, "MONITOR listening on TCP port %d on IPv6\n", port);
         }
     }
 
