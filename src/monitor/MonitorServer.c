@@ -511,7 +511,7 @@ static bool write_buffer_access_log(const monitor_t m) {
         return false;
 
     char *b;
-    size_t n, i = 0;
+    size_t n;
     if (m->command_data.access_log.current_node == NULL) {
         m->command_data.access_log.current_node = socks_get_first_access_log_node();
         if (m->command_data.access_log.current_node == NULL) {
@@ -520,7 +520,7 @@ static bool write_buffer_access_log(const monitor_t m) {
                 return false;
 
             b[0] = b[1] = '\0';
-            buffer_write_adv(&m->write_buffer, i);
+            buffer_write_adv(&m->write_buffer, 2);
             m->sent = true;
             return false;
         }
@@ -530,6 +530,8 @@ static bool write_buffer_access_log(const monitor_t m) {
 
     bool had_space_for_one = false;
     while (m->command_data.access_log.current_node != NULL) {
+        size_t i = 0;
+
         struct socks_access_log_details_t *details = socks_get_access_log(m->command_data.access_log.current_node);
 
         socks_access_log_node_t next = socks_get_next_access_log_node(m->command_data.access_log.current_node);
@@ -566,8 +568,8 @@ static bool write_buffer_access_log(const monitor_t m) {
         i += 1; // sprintf copia null
         i += sprintf(b + i, "%s", details->destination.port);
         i += 1; // sprintf copia null
-        i += sprintf(b + i, "%d", details->status);
-        i += 1; // sprintf copia null
+        b[i++] = (uint8_t) details->status;
+        b[i++] = '\0';
         if (next == NULL)
             b[i++] = '\0';
 
@@ -585,7 +587,7 @@ static bool write_buffer_password(const monitor_t m) {
         return false;
 
     char *b;
-    size_t n, i = 0;
+    size_t n;
     if (m->command_data.passwords.current_node == NULL) {
         m->command_data.passwords.current_node = sniffed_credentials_get_first(socks_get_sniffed_credentials_list());
         if (m->command_data.passwords.current_node == NULL) {
@@ -594,7 +596,7 @@ static bool write_buffer_password(const monitor_t m) {
                 return false;
 
             b[0] = b[1] = b[2] = '\0';
-            buffer_write_adv(&m->write_buffer, i);
+            buffer_write_adv(&m->write_buffer, 3);
             m->sent = true;
             return false;
         }
@@ -604,6 +606,8 @@ static bool write_buffer_password(const monitor_t m) {
 
     bool had_space_for_one = false;
     while (m->command_data.passwords.current_node != NULL) {
+        size_t i = 0;
+
         struct sniffed_credentials *credentials = sniffed_credentials_get(m->command_data.passwords.current_node);
 
         sniffed_credentials_node next = sniffed_credentials_get_next(m->command_data.passwords.current_node);
@@ -660,7 +664,7 @@ static bool write_buffer_users(const monitor_t m) {
         return false;
 
     char *b;
-    size_t n, i = 0;
+    size_t n;
     if (m->command_data.users.list == NULL) {
         m->command_data.users.list = auth_user_pass_get_values();
         m->command_data.users.current_node = sorted_hashmap_list_get_first(m->command_data.users.list);
@@ -670,7 +674,7 @@ static bool write_buffer_users(const monitor_t m) {
                 return false;
 
             b[0] = '\0';
-            buffer_write_adv(&m->write_buffer, i);
+            buffer_write_adv(&m->write_buffer, 1);
             m->sent = true;
             sorted_hashmap_list_free(m->command_data.users.list);
             m->command_data.users.list = NULL;
@@ -682,6 +686,8 @@ static bool write_buffer_users(const monitor_t m) {
 
     bool had_space_for_one = false;
     while (m->command_data.users.current_node != NULL) {
+        size_t i = 0;
+
         struct auth_user_pass_credentials *credentials = sorted_hashmap_list_get_element(
                 m->command_data.users.current_node);
 
@@ -723,7 +729,6 @@ static bool write_buffer_users(const monitor_t m) {
 
 static bool write_buffer_vars(const monitor_t m) {
     if (m->sent) return false;
-
 
     size_t n;
     uint8_t *buff = buffer_write_ptr(&m->write_buffer, &n);

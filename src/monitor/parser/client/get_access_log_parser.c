@@ -540,6 +540,12 @@ static const struct parser_state_transition OIP[] = {
     {.when = '9', .dest = ST_OIP, .act1 = copy_oip,},
     {.when = '.', .dest = ST_OIP, .act1 = copy_oip,},
     {.when = ':', .dest = ST_OIP, .act1 = copy_oip,},
+    {.when = 'a', .dest = ST_OIP, .act1 = copy_oip,},
+    {.when = 'b', .dest = ST_OIP, .act1 = copy_oip,},
+    {.when = 'c', .dest = ST_OIP, .act1 = copy_oip,},
+    {.when = 'd', .dest = ST_OIP, .act1 = copy_oip,},
+    {.when = 'e', .dest = ST_OIP, .act1 = copy_oip,},
+    {.when = 'f', .dest = ST_OIP, .act1 = copy_oip,},
     {.when = ANY, .dest = ST_INVALID_INPUT_FORMAT, .act1 = invalid_input,},
 };
 
@@ -794,21 +800,22 @@ struct access_log * get_access_log_parser_consume(uint8_t *s, size_t length, str
             break;
             case END_T:
                 ans->entries = realloc(ans->entries, sizeof(*(ans->entries)) * ans->entry_qty);
-                if(ans->entries == NULL){
-                    parser_destroy(ans->parser);
+                if(ans->entries == NULL && ans->entry_qty > 0){
                     return error(ans, REALLOC_ERROR);
                 }
                 ans->finished = 1;
-            break;
+                return ans;
             case INVALID_INPUT_FORMAT_T:
-                if(ans->entries[ans->entry_qty].time != NULL){
-                    free(ans->entries[ans->entry_qty].time);
-                    if(ans->entries[ans->entry_qty].user.user != NULL){
-                        free(ans->entries[ans->entry_qty].user.user);
-                        if(ans->entries[ans->entry_qty].origin_ip != NULL){
-                            free(ans->entries[ans->entry_qty].origin_ip);
-                            if(ans->entries[ans->entry_qty].destination != NULL){
-                                free(ans->entries[ans->entry_qty].destination);
+                if (!ans->finished) {
+                    if (ans->entries[ans->entry_qty].time != NULL) {
+                        free(ans->entries[ans->entry_qty].time);
+                        if (ans->entries[ans->entry_qty].user.user != NULL) {
+                            free(ans->entries[ans->entry_qty].user.user);
+                            if (ans->entries[ans->entry_qty].origin_ip != NULL) {
+                                free(ans->entries[ans->entry_qty].origin_ip);
+                                if (ans->entries[ans->entry_qty].destination != NULL) {
+                                    free(ans->entries[ans->entry_qty].destination);
+                                }
                             }
                         }
                     }
@@ -829,6 +836,7 @@ void free_access_log(struct access_log * access_log) {
                 free(access_log->entries[i].destination);
             }
             free(access_log->entries);
+            access_log->entries = NULL;
         }
         if(access_log->parser != NULL){
             parser_destroy(access_log->parser);

@@ -1,5 +1,5 @@
-#ifndef GET_ACCESS_PARSER_H_
-#define GET_ACCESS_PARSER_H_
+#ifndef GET_PASSWORD_PARSER_H_
+#define GET_PASSWORD_PARSER_H_
 
 
 /**

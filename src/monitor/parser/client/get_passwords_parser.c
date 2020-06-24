@@ -794,11 +794,11 @@ struct passwords * get_passwords_parser_consume(uint8_t *s, size_t length, struc
             break;
             case END_T:
                 ans->entries = realloc(ans->entries, sizeof(*(ans->entries)) * ans->entry_qty);
-                if(ans->entries == NULL){
+                if(ans->entries == NULL && ans->entry_qty > 0){
                     return error(ans, REALLOC_ERROR);
                 }
                 ans->finished = 1;
-            break;
+                return ans;
             case INVALID_INPUT_FORMAT_T:
                 if(ans->entries[ans->entry_qty].time != NULL){
                     free(ans->entries[ans->entry_qty].time);
