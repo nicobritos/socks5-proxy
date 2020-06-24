@@ -9,19 +9,9 @@
 
 ## Compilacion
 
-### Compilar servidor
-Ejecutar comando `make` en raiz
-El ejecutable se genera en ese mismo directorio
-
-### Compilar cliente
-Ejecutar comando `make` en `/src/monitor`
-El ejecutable se genera en ese mismo directorio
+Ambos ejecutables se generan ejecutando el comando make en la raiz. 
 
 ## Ejemplo Ejecucion
 
-`./PC-2020A-6-TPE.SOCKSV5`
-
-FALTA PARAMETROS USUARIO
-
-
+./PC-2020A-6-TPE.SOCKSV5 -l 127.0.0.1 --doh-port 80 -u root:root
 
