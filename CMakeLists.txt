@@ -30,6 +30,7 @@ set(SOURCE_FILES
         src/utils/parser.c
         src/monitor/MonitorServer.c
         src/monitor/parser/server/command_request_parser.c
+        src/monitor/parser/server/proxy_credentials_parser.c
 )
 
 set(MONITOR_CLIENT_SOURCE_FILES

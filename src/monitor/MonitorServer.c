@@ -20,6 +20,7 @@
 
 #include "MonitorServer.h"
 #include "parser/server/command_request_parser.h"
+#include "parser/server/proxy_credentials_parser.h"
 #include "../socks5/socks5nio.h"
 #include "../socks5/sniffer/sniffed_credentials.h"
 #include "../socks5/message/auth_user_pass_helper.h"
@@ -39,10 +40,18 @@
 #define LOG_SEVERITY_INFO 2
 #define LOG_SEVERITY_DEBUG 1
 
+#define ADMIN_USERNAME "root"
+#define ADMIN_PASSWORD "root"
+
+#define INITIAL_CUSTOM_MESSAGE "SIGSEGV"
+
 #define METRICS_RESPONSE_SIZE 24
 
 /** maquina de estados general */
 enum monitor_state {
+    HELLO_READ,
+    HELLO_WRITE,
+
     /**
      * recibe el mensaje del cliente y lo procesa
      *
@@ -89,6 +98,7 @@ typedef struct monitor_t {
     /** maquinas de estados */
     struct state_machine stm;
     struct command *command;
+    struct proxy_credentials *credentials;
 
     union {
         struct {
@@ -155,6 +165,18 @@ static const struct fd_handler monitor_handler = {
         .handle_close  = monitor_close,
 };
 
+/** ---------------- HELLO READ ---------------- */
+static void hello_read_init(unsigned state, struct selector_key *key);
+
+static unsigned hello_read_do(struct selector_key *key);
+
+static bool hello_write_response_buffer(const monitor_t m);
+
+/** ---------------- HELLO WRITE ---------------- */
+static unsigned hello_write_do(struct selector_key *key);
+
+static void hello_write_close(unsigned state, struct selector_key *key);
+
 /** ---------------- READ ---------------- */
 static void read_init(unsigned state, struct selector_key *key);
 
@@ -163,14 +185,12 @@ static unsigned read_do(struct selector_key *key);
 static void read_close(unsigned state, struct selector_key *key);
 
 /** ---------------- WRITE ---------------- */
-static void write_init(unsigned state, struct selector_key *key);
-
 static unsigned write_do(struct selector_key *key);
 
 static void write_close(unsigned state, struct selector_key *key);
 
 /** ---------------- AUX ---------------- */
-static bool write_response_buffer(monitor_t const m);
+static bool write_response_buffer(const monitor_t m);
 
 static bool write_buffer_metrics(const monitor_t m);
 
@@ -190,13 +210,16 @@ static uint8_t get_log_n(enum log_severity severity);
 
 static enum log_severity get_log_severity(uint8_t n);
 
-//static bool authenticate_user(char *buffer);
-//static void sign_in(char *buffer);
-
 /** ---------------- MONITOR HANDLERS ---------------- */
 static const struct state_definition client_statbl[] = {
         {
-            .state =
+                .state = HELLO_READ,
+                .on_arrival = hello_read_init,
+                .on_read_ready = hello_read_do,
+        },{
+                .state = HELLO_WRITE,
+                .on_write_ready = hello_write_do,
+                .on_departure = hello_write_close
         },
         {
                 .state            = READ,
@@ -206,7 +229,6 @@ static const struct state_definition client_statbl[] = {
         },
         {
                 .state = WRITE,
-                .on_arrival       = write_init,
                 .on_departure     = write_close,
                 .on_write_ready   = write_do,
         },
@@ -278,7 +300,7 @@ static monitor_t monitor_new(int client_fd) {
 
     ret->fd = client_fd;
 
-    ret->stm.initial = READ;
+    ret->stm.initial = HELLO_READ;
     ret->stm.max_state = ERROR;
     ret->stm.states = monitor_describe_states();
     stm_init(&ret->stm);
@@ -371,6 +393,90 @@ static void close_fd_(int fd, struct selector_key *key) {
     }
 }
 
+/** ---------------- HELLO READ ---------------- */
+static void hello_read_init(unsigned state, struct selector_key *key) {
+    ATTACHMENT(key)->credentials = proxy_credentials_parser_init();
+}
+
+static unsigned hello_read_do(struct selector_key *key) {
+    monitor_t m = ATTACHMENT(key);
+    uint8_t *ptr;
+    size_t count;
+    ssize_t n;
+
+    if (m->command == NULL)
+        return ERROR;
+
+    ptr = buffer_write_ptr(&m->read_buffer, &count);
+    n = sctp_recvmsg(key->fd, ptr, count, (struct sockaddr *) NULL, 0, &m->sndrcvinfo, 0);
+    if (n > 0) {
+        buffer_write_adv(&m->read_buffer, n);
+        m->command = command_request_parser_consume(ptr, n, m->command);
+        if (m->command == NULL)
+            return ERROR;
+        if (m->command->error != NO_ERROR)
+            return ERROR;
+        if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
+            hello_write_response_buffer(m);
+            return HELLO_WRITE;
+        } else {
+            return ERROR;
+        }
+    } else {
+        return ERROR;
+    }
+}
+
+static bool hello_write_response_buffer(const monitor_t m) {
+    if (strcmp(m->credentials->username, ADMIN_USERNAME) != 0 ||
+        strcmp(m->credentials->password, ADMIN_PASSWORD) != 0) {
+        m->logged = false;
+    } else {
+        m->logged = true;
+    }
+
+    size_t n;
+    uint8_t *b = buffer_write_ptr(&m->write_buffer, &n);
+    size_t len = snprintf(NULL, 0, "%c%s.", '1', INITIAL_CUSTOM_MESSAGE);
+    if (n < len) abort();
+
+    b[0] = m->logged ? 1 : 0;
+    sprintf((char *) b + 1, "%s", INITIAL_CUSTOM_MESSAGE);
+
+    buffer_write_adv(&m->write_buffer, len);
+}
+
+/** ---------------- HELLO WRITE ---------------- */
+static unsigned hello_write_do(struct selector_key *key) {
+    monitor_t m = ATTACHMENT(key);
+    unsigned ret = WRITE;
+    uint8_t *ptr;
+    size_t count;
+    ssize_t n;
+
+    ptr = buffer_read_ptr(&m->write_buffer, &count);
+    n = sctp_sendmsg(key->fd, (void *) ptr, (size_t) count, NULL, 0, 0, 0, 0, 0, 0);
+    if (n == -1) {
+        ret = ERROR;
+    } else {
+        buffer_read_adv(&m->write_buffer, n);
+        if (!buffer_can_read(&m->write_buffer)) {
+            if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
+                ret = READ;
+            } else {
+                ret = ERROR;
+            }
+        }
+    }
+
+    return ret;
+}
+
+static void hello_write_close(unsigned state, struct selector_key *key) {
+    proxy_credentials_free(ATTACHMENT(key)->credentials);
+    ATTACHMENT(key)->credentials = NULL;
+}
+
 /** ---------------- READ ---------------- */
 static void read_init(unsigned state, struct selector_key *key) {
     ATTACHMENT(key)->command = command_request_parser_init();
@@ -415,10 +521,6 @@ static void read_close(unsigned state, struct selector_key *key) {
 }
 
 /** ---------------- WRITE ---------------- */
-static void write_init(unsigned state, struct selector_key *key) {
-//    parser_init(&d->parser);
-}
-
 /**
  * Devuelve true si hay datos para seguir escribiendo, false sino
  * @param m
@@ -829,49 +931,3 @@ static enum log_severity get_log_severity(uint8_t n) {
         default: return log_severity_error;
     }
 }
-
-
-
-
-//static char *user = "admin";
-//static char *password = "adminadmin";
-
-
-
-//static bool authenticate_user(char *buffer) {
-//    uint8_t userRec[MAX_BUFFER];
-//    uint8_t passRec[MAX_BUFFER];
-//
-//    strcpy(userRec, buffer + 1);
-//    strcpy(passRec, buffer + 2 + strlen(userRec));
-//
-//    if (strcmp(user, userRec) == 0) {
-//        if (strcmp(password, passRec) == 0) {
-//            logged = true;
-//        }
-//    }
-//    return logged;
-//}
-//
-//static void sign_in(char *buffer) {
-//    uint8_t response[MAX_BUFFER];
-//    char message[255];
-//    bool userAuth = authenticate_user(buffer);
-//    if (userAuth) {
-//        printf("User:%s has signned in.\n", user);
-//        response[0] = 0x01;
-//        strcpy(message, "Welcome!");
-//    } else {
-//        printf("Failed authentication\n");
-//        response[0] = 0x00;
-//        strcpy(message, "Username Or Password Incorrect");
-//    }
-//
-//    strcpy(response + 1, message);
-//
-//    int ret = sctp_sendmsg(connSock, (void *) response, (size_t) sizeof(uint8_t) * (strlen(message) + 2), NULL, 0, 0, 0,
-//                           0, 0, 0);
-//    if (ret == -1) {
-//        printf("Error sending message\n");
-//    }
-//}
