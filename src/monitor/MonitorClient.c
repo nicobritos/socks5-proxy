@@ -19,27 +19,22 @@
 #include <errno.h>
 #include <getopt.h>
 
-#include "monitor_parser/client/auth_server_response_parser.h"
-#include "monitor_parser/client/get_metrics_parser.h"
-#include "monitor_parser/client/get_access_log_parser.h"
-#include "monitor_parser/client/get_users_parser.h"
-#include "monitor_parser/client/get_vars_parser.h"
-#include "monitor_parser/client/get_passwords_parser.h"
+#include "parser/client/auth_server_response_parser.h"
+#include "parser/client/get_metrics_parser.h"
+
+#include "../configuration.h"
 
 #include "MonitorClient.h"
 
 #define MAX_BUFFER 1024
-#define MY_PORT_NUM 57614
-#define HISTORICAL_CONNECTION 1
-#define CONCURRENT_CONNECTIOS 2
-#define BYTES_TRANSFERRED 3
+#define MY_PORT_NUM 8080
 #define PTC_UNSPEC 0
 #define CONFIGURATION_MENU 1
 #define METRIC_MENU 2
 static int sd = -1, rc;
 static char *address = "127.0.0.1";
-static uint16_t port = 57614;
-static struct addrinfo *res;
+static uint16_t port = 8080;
+static struct sockaddr_storage res;
 static bool logged = true;
 static char buffer[MAX_BUFFER];
 static char *username;
@@ -56,8 +51,6 @@ static void login();
 static void start_connection(int argc, char *argv[]);
 
 static void get_address_information();
-
-static void establish_connection();
 
 static void get_metrics();
 
@@ -78,7 +71,6 @@ static void get_vars(uint8_t *request,int length);
 
 
 int main(int argc, char* argv[]){
-
     start_connection(argc,argv);
 
     while(1){
@@ -189,7 +181,6 @@ static void login(){
 }
 
 static void start_connection(int argc, char *argv[]){
-
     get_address_information();
         
     establish_connection();
@@ -223,14 +214,18 @@ static void get_address_information(){
 }
 
 static void establish_connection(){
+    sd = socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP);
     
-    sd = socket(res->ai_family, res->ai_socktype, IPPROTO_SCTP);
     if(sd == -1){
         fprintf(stderr,"Error creating socket with the server using %s:%hu\n",address,port);
         exit(EXIT_FAILURE);
     }
 
-    rc = connect(sd, res->ai_addr, res->ai_addrlen);
+    res.ss_family = AF_INET;
+    ((struct sockaddr_in *)&res)->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    ((struct sockaddr_in *)&res)->sin_port = htons(port);
+
+    rc = connect(sd, (struct sockaddr_in *)&res, sizeof(res));
     if(rc == -1){
         fprintf(stderr, "Error establishing connection with the server via socket\n");
         exit(EXIT_FAILURE);

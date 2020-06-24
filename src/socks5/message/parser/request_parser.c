@@ -213,7 +213,7 @@ const char *request_parser_str(const struct request_parser *p) {
 
 /** libera recursos internos del parser */
 void request_parser_close(struct request_parser *p) {
-    if (p->request->address_type == REQUEST_ATYP_DOMAIN_NAME) {
+    if (p->request != NULL && p->request->address_type == REQUEST_ATYP_DOMAIN_NAME) {
         if (p->request->domain_name != NULL) {
             free(p->request->domain_name);
             p->request->domain_name = NULL;

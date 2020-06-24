@@ -55,8 +55,8 @@ main(const int argc, char **argv) {
     selector_status ss = SELECTOR_SUCCESS;
     fd_selector selector = NULL;
 
-    const int socks = socket(configuration.socks5.sockaddr.ss_family, SOCK_STREAM, IPPROTO_TCP);
-    const int monitor = socket(configuration.monitor.sockaddr.ss_family, SOCK_STREAM, IPPROTO_SCTP);
+    const int socks = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
+    const int monitor = socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP);
     if (socks < 0) {
         err_msg = "Unable to create socks' socket";
         goto finally;
@@ -69,16 +69,25 @@ main(const int argc, char **argv) {
     // man 7 ip. no importa reportar nada si falla.
     setsockopt(socks, SOL_SOCKET, SO_REUSEADDR, &(int) {1}, sizeof(int));
     setsockopt(monitor, SOL_SOCKET, SO_REUSEADDR, &(int) {1}, sizeof(int));
+    bool socks_both, monitor_both;
 
-    if (configuration.socks5.sockaddr.ss_family == AF_INET6) {
+    if (configuration.socks5.sockaddr.ss_family == AF_INET) {
         // Necesitamos desactivar esto para bindear a IPv4 e IPv6 al mismo tiempo
         setsockopt(socks, IPPROTO_IPV6, IPV6_V6ONLY, &(int) {0}, sizeof(int));
+        socks_both = true;
+    } else {
+        socks_both = false;
     }
-    if (configuration.monitor.sockaddr.ss_family == AF_INET6) {
+    if (configuration.monitor.sockaddr.ss_family == AF_INET) {
         // Necesitamos desactivar esto para bindear a IPv4 e IPv6 al mismo tiempo
-        setsockopt(socks, IPPROTO_IPV6, IPV6_V6ONLY, &(int) {0}, sizeof(int));
+        setsockopt(monitor, IPPROTO_IPV6, IPV6_V6ONLY, &(int) {0}, sizeof(int));
+        monitor_both = true;
+    } else {
+        monitor_both = false;
     }
 
+    configuration.socks5.sockaddr.ss_family = AF_INET6;
+    configuration.monitor.sockaddr.ss_family = AF_INET6;
     if (bind(socks, (struct sockaddr *) &configuration.socks5.sockaddr, sizeof(configuration.socks5.sockaddr)) < 0) {
         err_msg = "unable to bind socks' socket";
         goto finally;
@@ -147,20 +156,34 @@ main(const int argc, char **argv) {
         goto finally;
     }
 
-
-    if (configuration.socks5.sockaddr.ss_family == AF_INET) {
+    if (socks_both) {
         uint16_t port = ntohs(((struct sockaddr_in *)&configuration.socks5.sockaddr)->sin_port);
-        fprintf(stdout, "Listening on TCP port %d on IPv4 and IPv6\n", port);
+        fprintf(stdout, "SOCKS listening on TCP port %d on IPv4 and IPv6\n", port);
 
         if (system_log != NULL) {
-            logger_append_to_log(system_log, log_severity_info, "Server up with TCP port %d on IPv4 and IPv6", 1, port);
+            logger_append_to_log(system_log, log_severity_info, "SOCKS server up with TCP port %d on IPv4 and IPv6", 1, port);
         }
     } else {
         uint16_t port = ntohs(((struct sockaddr_in6 *)&configuration.socks5.sockaddr)->sin6_port);
-        fprintf(stdout, "Listening on TCP port %d on IPv6\n", port);
+        fprintf(stdout, "SOCKS listening on TCP port %d on IPv6\n", port);
 
         if (system_log != NULL) {
-            logger_append_to_log(system_log, log_severity_info, "Server up with TCP port %d on IPv6", 1, port);
+            logger_append_to_log(system_log, log_severity_info, "SOCKS server up with TCP port %d on IPv6", 1, port);
+        }
+    }
+    if (monitor_both) {
+        uint16_t port = ntohs(((struct sockaddr_in *)&configuration.monitor.sockaddr)->sin_port);
+        fprintf(stdout, "MONITOR listening on TCP port %d on IPv4 and IPv6\n", port);
+
+        if (system_log != NULL) {
+            logger_append_to_log(system_log, log_severity_info, "MONITOR server up with TCP port %d on IPv4 and IPv6", 1, port);
+        }
+    } else {
+        uint16_t port = ntohs(((struct sockaddr_in6 *)&configuration.monitor.sockaddr)->sin6_port);
+        fprintf(stdout, "MONITOR listening on TCP port %d on IPv6\n", port);
+
+        if (system_log != NULL) {
+            logger_append_to_log(system_log, log_severity_info, "MONITOR server up with TCP port %d on IPv6", 1, port);
         }
     }
 
