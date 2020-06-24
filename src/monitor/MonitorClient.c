@@ -22,20 +22,19 @@
 #include "parser/client/auth_server_response_parser.h"
 #include "parser/client/get_metrics_parser.h"
 
+#include "../configuration.h"
+
 #include "MonitorClient.h"
 
 #define MAX_BUFFER 1024
-#define MY_PORT_NUM 57614
-#define HISTORICAL_CONNECTION 1
-#define CONCURRENT_CONNECTIOS 2
-#define BYTES_TRANSFERRED 3
+#define MY_PORT_NUM 8080
 #define PTC_UNSPEC 0
 #define CONFIGURATION_MENU 1
 #define METRIC_MENU 2
 static int sd = -1, rc;
 static char *address = "127.0.0.1";
-static uint16_t port = 57614;
-static struct addrinfo *res;
+static uint16_t port = 8080;
+static struct sockaddr_storage res;
 static bool logged = true;
 static char buffer[MAX_BUFFER];
 static char *username;
@@ -55,8 +54,6 @@ static void check_command_line(int argc, char *argv[]);
 
 static void get_address_information();
 
-static void establish_connection();
-
 static void get_metrics();
 
 static void get_menu_option();
@@ -67,7 +64,6 @@ static uint16_t parse_port(const char *s);
 
 
 int main(int argc, char* argv[]){
-
     start_connection(argc,argv);
 
     while(1){
@@ -178,48 +174,17 @@ static void login(){
 }
 
 static void start_connection(int argc, char *argv[]){
-
-    get_address_information();
-        
-    establish_connection();
-}
-
-static void get_address_information(){
-    
-    struct addrinfo hints = {
-        .ai_flags = AI_PASSIVE,                /* Returned socket address structure is intended for use in a call to bind(2) */
-        .ai_family = PF_UNSPEC,                /* Caller accept IPv4 or IPv6 */
-        .ai_socktype = SOCK_STREAM,    
-        .ai_protocol = PTC_UNSPEC,             /* Caller will accept any protocol */
-        .ai_addr = NULL,
-        .ai_canonname = NULL,
-        .ai_next = NULL, 
-    };
-
-    
-    char port_str[15];
-    snprintf(port_str, sizeof(port_str), "%hu", port);
-
-    /********************************************************************/
-    /* Get the address information for the server using getaddrinfo().  */
-    /********************************************************************/
-
-    int gai = getaddrinfo(address, port_str, &hints, &res);
-    if(gai != 0){
-        fprintf("Host not found: %s\n", gai_strerror(rc));
-        exit(EXIT_FAILURE);
-    }
-}
-
-static void establish_connection(){
-    
-    sd = socket(res->ai_family, res->ai_socktype, IPPROTO_SCTP);
+    sd = socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP);
     if(sd == -1){
         fprintf(stderr,"Error creating socket with the server using %s:%hu\n",address,port);
         exit(EXIT_FAILURE);
     }
 
-    rc = connect(sd, res->ai_addr, res->ai_addrlen);
+    res.ss_family = AF_INET;
+    ((struct sockaddr_in *)&res)->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    ((struct sockaddr_in *)&res)->sin_port = htons(port);
+
+    rc = connect(sd, (struct sockaddr_in *)&res, sizeof(res));
     if(rc == -1){
         fprintf(stderr, "Error establishing connection with the server via socket\n");
         exit(EXIT_FAILURE);
