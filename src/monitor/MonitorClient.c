@@ -38,6 +38,8 @@
 #define CONFIGURATION_MENU 1
 #define METRIC_MENU 2
 #define ANSWER_MAX_LENGTH 255
+#define STATUS_ACTIVE "YES"
+#define STATUS_INACTIVE "NO"
 
 static int sd = -1, rc;
 static char *address = "127.0.0.1";
@@ -370,7 +372,12 @@ static void get_users() {
             abort();
         }
 
-        printf("Username: %s\tStatus: %u\n", ans->users->user, ans->users->status);
+        printf("%zu entries:\n", ans->users_qty);
+        for (size_t i = 0; i < ans->users_qty; i++) {
+            printf("\nEntry %zu\n", i + 1);
+            printf("\tUser: %s\n", ans->users[i].user);
+            printf("\tActive: %s\n", ans->users[i].status ? STATUS_ACTIVE : STATUS_INACTIVE);
+        }
     }
      free_users(ans);
 }
