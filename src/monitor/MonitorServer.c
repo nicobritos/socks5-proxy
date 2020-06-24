@@ -466,7 +466,7 @@ static unsigned write_do(struct selector_key *key) {
     ssize_t n;
 
     ptr = buffer_read_ptr(&m->write_buffer, &count);
-    n = sctp_sendmsg(key->fd, (void *) ptr, (size_t) count, NULL, 0, 0, MSG_NOSIGNAL,0, 0, 0);
+    n = sctp_sendmsg(key->fd, (void *) ptr, (size_t) count, NULL, 0, 0, 0, 0, 0, 0);
     if (n == -1) {
         ret = ERROR;
     } else {
@@ -678,9 +678,9 @@ static bool write_buffer_users(const monitor_t m) {
 //    char *b;
 //    size_t n, i;
 //    if (m->command_data.users.list == NULL) {
-//        m->command_data
-//        m->command_data.passwords.current_node = sniffed_credentials_get_first(socks_get_sniffed_credentials_list());
-//        if (m->command_data.passwords.current_node == NULL) {
+//        m->command_data.users.list = auth_user_pass_get_values();
+//        m->command_data.users.current_node = sorted_hashmap_list_get_first(m->command_data.users.list);
+//        if (m->command_data.users.current_node == NULL) {
 //            b = (char *) buffer_write_ptr(&m->write_buffer, &n);
 //            if (n < 1) // Necesitamos escribir un null (fin de entry, ver RFC)
 //                return false;
@@ -693,10 +693,10 @@ static bool write_buffer_users(const monitor_t m) {
 //    }
 //
 //    bool had_space_for_one = false;
-//    while (m->command_data.passwords.current_node != NULL) {
-//        struct sniffed_credentials *credentials = sniffed_credentials_get(m->command_data.passwords.current_node);
+//    while (m->command_data.users.current_node != NULL) {
+//        struct auth_user_pass_credentials *credentials = sorted_hashmap_list_get_element(m->command_data.users.current_node);
 //
-//        sniffed_credentials_node next = sniffed_credentials_get_next(m->command_data.passwords.current_node);
+//        sniffed_credentials_node next = sorted_hashmap_list_get_element(m->command_data.users.current_node);
 //        b = (char *) buffer_write_ptr(&m->write_buffer, &n);
 //
 //        // Tenemos que ver primero cuanto espacio necesitamos
@@ -705,7 +705,7 @@ static bool write_buffer_users(const monitor_t m) {
 //        size_t space_needed = snprintf(
 //                NULL,
 //                0,
-//                "%s.%s.P.%s.%s.%s.%s.%s..",
+//                "%s.%d.P.%s.%s.%s.%s.%s..",
 //                credentials->datetime,
 //                credentials->username,
 //                credentials->protocol,
@@ -741,7 +741,7 @@ static bool write_buffer_users(const monitor_t m) {
 //        m->command_data.passwords.current_node = next;
 //        if (!had_space_for_one) had_space_for_one = true;
 //    }
-
+//
 //    return had_space_for_one;
     return false;
 }
