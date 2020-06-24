@@ -35,13 +35,6 @@ enum event_type {
 };
 
 static void
-next_state(struct parser_event *ret, const uint8_t c) {
-    ret->type = SUCCESS;
-    ret->n = 1;
-    ret->data[0] = c;
-}
-
-static void
 copy_version(struct parser_event *ret, const uint8_t c) {
     ret->type = COPY_VERSION;
     ret->n = 1;
@@ -126,6 +119,7 @@ static struct parser_definition definition = {
 struct proxy_credentials * proxy_credentials_parser_init(){
     struct proxy_credentials * ans = calloc(1, sizeof(*ans));
     ans->parser = parser_init(parser_no_classes(), &definition);
+    return ans;
 }
 
 struct proxy_credentials * proxy_credentials_parser_consume(uint8_t *s, size_t length, struct proxy_credentials * ans) {

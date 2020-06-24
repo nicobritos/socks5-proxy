@@ -170,7 +170,7 @@ static void hello_read_init(unsigned state, struct selector_key *key);
 
 static unsigned hello_read_do(struct selector_key *key);
 
-static bool hello_write_response_buffer(const monitor_t m);
+static void hello_write_response_buffer(const monitor_t m);
 
 /** ---------------- HELLO WRITE ---------------- */
 static unsigned hello_write_do(struct selector_key *key);
@@ -277,11 +277,6 @@ void monitor_pool_destroy() {
         next = m->next;
         free(m);
     }
-
-//    if (logger != NULL) {
-//        logger_close_log(logger);
-//        logger = NULL;
-//    }
 }
 
 /** ---------------- PRIVATE ---------------- */
@@ -427,7 +422,7 @@ static unsigned hello_read_do(struct selector_key *key) {
     }
 }
 
-static bool hello_write_response_buffer(const monitor_t m) {
+static void hello_write_response_buffer(const monitor_t m) {
     if (strcmp(m->credentials->username, ADMIN_USERNAME) != 0 ||
         strcmp(m->credentials->password, ADMIN_PASSWORD) != 0) {
         m->logged = false;
@@ -449,7 +444,7 @@ static bool hello_write_response_buffer(const monitor_t m) {
 /** ---------------- HELLO WRITE ---------------- */
 static unsigned hello_write_do(struct selector_key *key) {
     monitor_t m = ATTACHMENT(key);
-    unsigned ret = WRITE;
+    unsigned ret = HELLO_WRITE;
     uint8_t *ptr;
     size_t count;
     ssize_t n;
