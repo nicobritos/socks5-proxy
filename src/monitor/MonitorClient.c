@@ -66,7 +66,7 @@ static void get_metrics();
 
 static void get_users();
 
-static void get_access_log(h);
+static void get_access_log();
 
 static void get_passwords();
 
@@ -195,30 +195,30 @@ static void start_connection(int argc, char *argv[]){
 }
 
 static void get_address_information(){
-    
-    struct addrinfo hints = {
-        .ai_flags = AI_PASSIVE,                /* Returned socket address structure is intended for use in a call to bind(2) */
-        .ai_family = PF_UNSPEC,                /* Caller accept IPv4 or IPv6 */
-        .ai_socktype = SOCK_STREAM,    
-        .ai_protocol = PTC_UNSPEC,             /* Caller will accept any protocol */
-        .ai_addr = NULL,
-        .ai_canonname = NULL,
-        .ai_next = NULL, 
-    };
-
-    
-    char port_str[15];
-    snprintf(port_str, sizeof(port_str), "%hu", port);
-
-    /********************************************************************/
-    /* Get the address information for the server using getaddrinfo().  */
-    /********************************************************************/
-
-    int gai = getaddrinfo(address, port_str, &hints, &res);
-    if(gai != 0){
-        printf("Host not found: %s\n", gai_strerror(rc));
-        exit(EXIT_FAILURE);
-    }
+//
+//    struct addrinfo hints = {
+//        .ai_flags = AI_PASSIVE,                /* Returned socket address structure is intended for use in a call to bind(2) */
+//        .ai_family = PF_UNSPEC,                /* Caller accept IPv4 or IPv6 */
+//        .ai_socktype = SOCK_STREAM,
+//        .ai_protocol = PTC_UNSPEC,             /* Caller will accept any protocol */
+//        .ai_addr = NULL,
+//        .ai_canonname = NULL,
+//        .ai_next = NULL,
+//    };
+//
+//
+//    char port_str[15];
+//    snprintf(port_str, sizeof(port_str), "%hu", port);
+//
+//    /********************************************************************/
+//    /* Get the address information for the server using getaddrinfo().  */
+//    /********************************************************************/
+//
+//    int gai = getaddrinfo(address, port_str, &hints, (struct addrinfo**) &res);
+//    if(gai != 0){
+//        printf("Host not found: %s\n", gai_strerror(rc));
+//        exit(EXIT_FAILURE);
+//    }
 }
 
 static void establish_connection(){
@@ -262,7 +262,7 @@ static void get_command(const int code){
     ret = sctp_sendmsg (sd, (void *)datagram, (size_t) sizeof(uint8_t) * DATAGRAM_MAX_LENGTH,NULL, 0, 0, 0, 0, 0, 0);
 
     if(ret == -1 || ret == 0){
-        return -1;
+        return;
     } 
 
     switch (code){
@@ -345,7 +345,7 @@ static void get_users(){
             break;
         }
         ans =  get_users_parser_consume(answer,ret,ans);
-        printf("Username: %s\tStatus: %U\n", ans->users->user,ans->users->status);   
+        printf("Username: %s\tStatus: %u\n", ans->users->user,ans->users->status);
     }
     // free_user(ans);
 }
@@ -418,8 +418,8 @@ static void get_passwords(uint8_t *response, int length){
         }
         ans =  get_passwords_parser_consume(answer,ret,ans);
         printf("%zu entries:\n", ans->entry_qty);
-        for(int i = 0; i<ans->entry_qty; i++){
-            printf("\nEntry %d\n", i);
+        for(size_t i = 0; i<ans->entry_qty; i++){
+            printf("\nEntry %lu\n", i);
             printf("\tTime: %s\n",ans->entries[i].time);
             printf("\tUser: %s\n",ans->entries[i].user);
             printf("\tProtocol: %s\n",ans->entries[i].protocol);
@@ -598,6 +598,7 @@ static void get_menu_option(){
             break;
         case 7:
             set_vars();
+            break;
         default:
             printf("Error: Invalid option: %lu \n Please try again with a valid option.",ret);
         break;

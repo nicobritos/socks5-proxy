@@ -7,8 +7,6 @@
 #define CHUNK_SIZE 10
 
 /* Funciones auxiliares */
-static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
-
 static struct metrics *error(struct metrics *ans, parser_error_t error_type);
 
 // definición de maquina
@@ -50,13 +48,6 @@ enum event_type {
     END_T,
     INVALID_INPUT_FORMAT_T,
 };
-
-static void
-next_state(struct parser_event *ret, const uint8_t c) {
-    ret->type = SUCCESS;
-    ret->n = 1;
-    ret->data[0] = c;
-}
 
 static void
 copy_econ(struct parser_event *ret, const uint8_t c) {
@@ -264,6 +255,7 @@ struct metrics * get_metrics_parser_init(){
     struct metrics * ans = calloc(1, sizeof(*ans));
     ans->parser = parser_init(parser_no_classes(), &definition);
     ans->finished = 0;
+    return ans;
 }
 
 struct metrics * get_metrics_parser_consume(uint8_t *s, size_t length, struct metrics * ans) {
@@ -308,13 +300,6 @@ static struct metrics * error(struct metrics *ans, parser_error_t error_type) {
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;
     return ans;
-}
-
-static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
-    if (current_length % CHUNK_SIZE == 0) {
-        return realloc(ptr, ptr_size * (current_length + CHUNK_SIZE));
-    }
-    return ptr;
 }
 
 /** 

@@ -293,8 +293,8 @@ bool sorted_hashmap_set_freer(sorted_hashmap_t hashmap, void (freer)(void *e)) {
 sorted_hashmap_list_t sorted_hashmap_get_values(sorted_hashmap_t hashmap) {
     sorted_hashmap_list_t list = malloc(sizeof(*list));
     if (list == NULL) return NULL;
+    list->first = NULL;
     if (hashmap->total_nodes == 0) {
-        list->first = NULL;
         return list;
     }
 
@@ -304,16 +304,24 @@ sorted_hashmap_list_t sorted_hashmap_get_values(sorted_hashmap_t hashmap) {
 
     while (i < hashmap->overflow_nodes_length) {
         hashmap_node = hashmap->overflow_nodes[i];
-        if (hashmap_node != NULL) {
+        while (hashmap_node != NULL) {
             list_node = malloc(sizeof(*list_node));
             if (list_node == NULL) {
                 sorted_hashmap_list_free(list);
                 return NULL;
             }
 
-            list_node->next = previous_list_node;
+            if (previous_list_node != NULL) {
+                previous_list_node->next = list_node;
+            } else if (list->first == NULL) {
+                list->first = list_node;
+            }
+
             list_node->element = hashmap_node->element;
+            list_node->next = NULL;
             previous_list_node = list_node;
+
+            hashmap_node = hashmap_node->next;
         }
 
         i++;

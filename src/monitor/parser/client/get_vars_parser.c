@@ -7,9 +7,7 @@
 #define CHUNK_SIZE 10
 
 /* Funciones auxiliares */
-void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
-
-struct vars *error(struct vars *ans, parser_error_t error_type);
+static struct vars *error(struct vars *ans, parser_error_t error_type);
 
 // definición de maquina
 
@@ -138,7 +136,8 @@ static struct parser_definition definition = {
 
 struct vars * get_vars_parser_init(){
     struct vars * ans = calloc(1, sizeof(*ans));
-    struct parser *parser = parser_init(parser_no_classes(), &definition);
+    ans->parser = parser_init(parser_no_classes(), &definition);
+    return ans;
 }
 
 struct vars * get_vars_parser_consume(uint8_t *s, size_t length, struct vars * ans) {
@@ -173,18 +172,11 @@ void free_vars(struct vars *vars) {
     }
 }
 
-struct vars *error(struct vars *ans, parser_error_t error_type) {
+static struct vars *error(struct vars *ans, parser_error_t error_type) {
     free_vars(ans);
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;
     return ans;
-}
-
-void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
-    if (current_length % CHUNK_SIZE == 0) {
-        return realloc(ptr, ptr_size * (current_length + CHUNK_SIZE));
-    }
-    return ptr;
 }
 
 /** 

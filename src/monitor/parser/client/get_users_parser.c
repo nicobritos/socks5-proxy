@@ -31,13 +31,6 @@ enum event_type {
 };
 
 static void
-next_state(struct parser_event *ret, const uint8_t c) {
-    ret->type = SUCCESS;
-    ret->n = 1;
-    ret->data[0] = c;
-}
-
-static void
 copy_user(struct parser_event *ret, const uint8_t c) {
     ret->type = COPY_USER;
     ret->n = 1;
@@ -124,6 +117,7 @@ static struct parser_definition definition = {
 struct users * get_users_parser_init(){
     struct users * ans = calloc(1, sizeof(*ans));
     ans->parser = parser_init(parser_no_classes(), &definition);
+    return ans;
 }
 
 struct users * get_users_parser_consume(uint8_t *s, size_t length, struct users * ans) {
@@ -161,7 +155,7 @@ struct users * get_users_parser_consume(uint8_t *s, size_t length, struct users 
 void free_users(struct users *users) {
     if (users != NULL) {
         if(users->users != NULL){
-            for(int i = 0; i<users->users_qty; i++){
+            for(size_t i = 0; i<users->users_qty; i++){
                 free(users->users[i].user);
             }
             free(users->users);

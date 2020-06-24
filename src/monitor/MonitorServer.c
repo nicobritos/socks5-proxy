@@ -40,6 +40,7 @@
 #define LOG_SEVERITY_DEBUG 1
 
 #define METRICS_RESPONSE_SIZE 24
+#define VARS_RESPONSE_SIZE 3
 
 /** maquina de estados general */
 enum monitor_state {
@@ -163,6 +164,7 @@ static bool write_buffer_metrics(const monitor_t m);
 static bool write_buffer_access_log(const monitor_t m);
 static bool write_buffer_password(const monitor_t m);
 static bool write_buffer_users(const monitor_t m);
+static bool write_buffer_vars(const monitor_t m);
 
 static bool authenticate_user(char *buffer);
 static void sign_in(char *buffer);
@@ -403,56 +405,10 @@ static bool write_response_buffer(const monitor_t m) {
             return write_buffer_access_log(m);
         case GET_PASSWORDS:
             return write_buffer_password(m);
-        case GET_USERS: {
-            if (m->sent && m->command_data.users.current_node == NULL)
-                return false;
-
-            if (m->command_data.users.current_node == NULL) {
-                m->command_data.users.list = auth_user_pass_get_values();
-                m->command_data.users.current_node = sorted_hashmap_list_get_first(m->command_data.users.list);
-                m->sent = true;
-            }
-            if (m->command_data.users.list != NULL) {
-                struct auth_user_pass_credentials *credentials = sorted_hashmap_list_get_element(m->command_data.users.current_node);
-
-                sorted_hashmap_list_node_t next = sorted_hashmap_list_get_next_node(m->command_data.users.current_node);
-                size_t n;
-                uint8_t *b = buffer_write_ptr(&m->write_buffer, &n);
-                buffer_write_adv(&m->write_buffer, credentials->username_length + (next != NULL ? 2 : 3));
-
-                memcpy(b, credentials->username, credentials->username_length + 1);
-                b[credentials->username_length + 1] = credentials->active ? 1 : 0;
-                if (next == NULL) {
-                    b[credentials->username_length + 2] = '\0';
-                    sorted_hashmap_list_free(m->command_data.users.list);
-                    m->command_data.users.list = NULL;
-                    m->command_data.users.current_node = NULL;
-                }
-            }
-            return true;
-        }
-        case GET_VARS: {
-            if (m->sent)
-                return false;
-
-            uint8_t log_n;
-            log_t log;
-
-            switch (m->command->var) {
-                case SYSTEM_LOG:
-                    log = logger_get_system_log();
-                    log_n = VAR_SYSTEM_LOG;
-                    break;
-                case SOCKS_LOG:
-                    log = socks_get_log();
-                    log_n = VAR_SOCKS_LOG;
-                    break;
-            }
-
-            populate_vars(&m->write_buffer, log_n, log);
-            m->sent = true;
-            return true;
-        }
+        case GET_USERS:
+            return write_buffer_users(m);
+        case GET_VARS:
+            return write_buffer_vars(m);
         case SET_USER:
             break; // TODO
         case SET_VAR:
@@ -508,24 +464,25 @@ static bool write_buffer_metrics(const monitor_t m) {
     uint8_t i = 0;
     uint8_t ib = 0;
     while (i < sizeof(uint64_t)) {
-        buff[ib] = (socks_get_total_connections() >> ((sizeof(uint64_t) - i - 1) * 8)) & 0xFF;
+        buff[ib] = (socks_get_total_connections() >> ((sizeof(uint64_t) - i - 1u) * 8u)) & 0xFFu;
         i++;
         ib++;
     }
     i = 0;
     while (i < sizeof(uint64_t)) {
-        buff[ib] = (socks_get_current_connections() >> ((sizeof(uint64_t) - i - 1) * 8)) & 0xFF;
+        buff[ib] = (socks_get_current_connections() >> ((sizeof(uint64_t) - i - 1u) * 8u)) & 0xFFu;
         i++;
         ib++;
     }
     i = 0;
     while (i < sizeof(uint64_t)) {
-        buff[ib] = (socks_get_total_bytes_transferred() >> ((sizeof(uint64_t) - i - 1) * 8)) & 0xFF;
+        buff[ib] = (socks_get_total_bytes_transferred() >> ((sizeof(uint64_t) - i - 1u) * 8u)) & 0xFFu;
         i++;
         ib++;
     }
 
-    return m->sent = true;
+    m->sent = true;
+    return false;
 }
 
 static bool write_buffer_access_log(const monitor_t m) {
@@ -533,7 +490,7 @@ static bool write_buffer_access_log(const monitor_t m) {
         return false;
 
     char *b;
-    size_t n, i;
+    size_t n, i = 0;
     if (m->command_data.access_log.current_node == NULL) {
         m->command_data.access_log.current_node = socks_get_first_access_log_node();
         if (m->command_data.access_log.current_node == NULL) {
@@ -543,6 +500,8 @@ static bool write_buffer_access_log(const monitor_t m) {
 
             b[0] = b[1] = '\0';
             buffer_write_adv(&m->write_buffer, i);
+            m->sent = true;
+            return false;
         }
 
         m->sent = true;
@@ -597,7 +556,7 @@ static bool write_buffer_access_log(const monitor_t m) {
         if (!had_space_for_one) had_space_for_one = true;
     }
 
-    return had_space_for_one;
+    return had_space_for_one && m->command_data.access_log.current_node != NULL;
 }
 
 static bool write_buffer_password(const monitor_t m) {
@@ -605,7 +564,7 @@ static bool write_buffer_password(const monitor_t m) {
         return false;
 
     char *b;
-    size_t n, i;
+    size_t n, i = 0;
     if (m->command_data.passwords.current_node == NULL) {
         m->command_data.passwords.current_node = sniffed_credentials_get_first(socks_get_sniffed_credentials_list());
         if (m->command_data.passwords.current_node == NULL) {
@@ -615,6 +574,8 @@ static bool write_buffer_password(const monitor_t m) {
 
             b[0] = b[1] = b[2] = '\0';
             buffer_write_adv(&m->write_buffer, i);
+            m->sent = true;
+            return false;
         }
 
         m->sent = true;
@@ -633,7 +594,7 @@ static bool write_buffer_password(const monitor_t m) {
         size_t space_needed = snprintf(
                 NULL,
                 0,
-                "%s.%s.P.%s.%s.%s.%s.%s..",
+                "%s.%s.P.%s.%s.%s.%s.%s...",
                 credentials->datetime,
                 credentials->username,
                 credentials->protocol,
@@ -670,114 +631,100 @@ static bool write_buffer_password(const monitor_t m) {
         if (!had_space_for_one) had_space_for_one = true;
     }
 
-    return had_space_for_one;
+    return had_space_for_one && m->command_data.passwords.current_node != NULL;
 }
 
 static bool write_buffer_users(const monitor_t m) {
-//    if (m->sent && m->command_data.users.current_node == NULL)
-//        return false;
-//
-//    char *b;
-//    size_t n, i;
-//    if (m->command_data.users.list == NULL) {
-//        m->command_data.users.list = auth_user_pass_get_values();
-//        m->command_data.users.current_node = sorted_hashmap_list_get_first(m->command_data.users.list);
-//        if (m->command_data.users.current_node == NULL) {
-//            b = (char *) buffer_write_ptr(&m->write_buffer, &n);
-//            if (n < 1) // Necesitamos escribir un null (fin de entry, ver RFC)
-//                return false;
-//
-//            b[0] = '\0';
-//            buffer_write_adv(&m->write_buffer, i);
-//        }
-//
-//        m->sent = true;
-//    }
-//
-//    bool had_space_for_one = false;
-//    while (m->command_data.users.current_node != NULL) {
-//        struct auth_user_pass_credentials *credentials = sorted_hashmap_list_get_element(m->command_data.users.current_node);
-//
-//        sniffed_credentials_node next = sorted_hashmap_list_get_element(m->command_data.users.current_node);
-//        b = (char *) buffer_write_ptr(&m->write_buffer, &n);
-//
-//        // Tenemos que ver primero cuanto espacio necesitamos
-//        // Uso el caracter '.' como separador de strings, representa
-//        // el NULL en el RFC
-//        size_t space_needed = snprintf(
-//                NULL,
-//                0,
-//                "%s.%d.P.%s.%s.%s.%s.%s..",
-//                credentials->datetime,
-//                credentials->username,
-//                credentials->protocol,
-//                credentials->destination,
-//                credentials->port,
-//                credentials->logger_user,
-//                credentials->password);
-//        if (n < space_needed)
-//            break;
-//
-//        i = sprintf(b + i, "%s", credentials->datetime);
-//        i += 1; // sprintf copia null
-//        i += sprintf(b + i, "%s", credentials->username);
-//        i += 1; // sprintf copia null
-//        i += sprintf(b + i, "P");
-//        i += 1; // sprintf copia null
-//        i += sprintf(b + i, "%s", credentials->protocol);
-//        i += 1; // sprintf copia null
-//        i += sprintf(b + i, "%s", credentials->destination);
-//        i += 1; // sprintf copia null
-//        i += sprintf(b + i, "%s", credentials->port);
-//        i += 1; // sprintf copia null
-//        i += sprintf(b + i, "%s", credentials->logger_user);
-//        i += 1; // sprintf copia null
-//        i += sprintf(b + i, "%s", credentials->password);
-//        i += 1; // sprintf copia null
-//        b[i++] = '\0'; // Otro mas significa final de entry
-//        if (next == NULL)
-//            b[i++] = '\0';
-//
-//        buffer_write_adv(&m->write_buffer, i);
-//
-//        m->command_data.passwords.current_node = next;
-//        if (!had_space_for_one) had_space_for_one = true;
-//    }
-//
-//    return had_space_for_one;
-    return false;
+    if (m->sent && m->command_data.users.current_node == NULL)
+        return false;
+
+    char *b;
+    size_t n, i = 0;
+    if (m->command_data.users.list == NULL) {
+        m->command_data.users.list = auth_user_pass_get_values();
+        m->command_data.users.current_node = sorted_hashmap_list_get_first(m->command_data.users.list);
+        if (m->command_data.users.current_node == NULL) {
+            b = (char *) buffer_write_ptr(&m->write_buffer, &n);
+            if (n < 1) // Necesitamos escribir un null (fin de entry, ver RFC)
+                return false;
+
+            b[0] = '\0';
+            buffer_write_adv(&m->write_buffer, i);
+            m->sent = true;
+            sorted_hashmap_list_free(m->command_data.users.list);
+            m->command_data.users.list = NULL;
+            return false;
+        }
+
+        m->sent = true;
+    }
+
+    bool had_space_for_one = false;
+    while (m->command_data.users.current_node != NULL) {
+        struct auth_user_pass_credentials *credentials = sorted_hashmap_list_get_element(m->command_data.users.current_node);
+
+        sorted_hashmap_list_node_t next = sorted_hashmap_list_get_next_node(m->command_data.users.current_node);
+        b = (char *) buffer_write_ptr(&m->write_buffer, &n);
+
+        // Tenemos que ver primero cuanto espacio necesitamos
+        // Uso el caracter '.' como separador de strings, representa
+        // el NULL en el RFC
+        size_t space_needed = snprintf(
+                NULL,
+                0,
+                "%s.%c.",
+                credentials->username,
+                credentials->active ? '1' : '0');
+        if (n < space_needed)
+            break;
+
+        i = sprintf(b + i, "%s", credentials->username);
+        i += 1; // sprintf copia null
+        i += sprintf(b + i, "%c", credentials->active ? '1' : '0');
+        if (next == NULL) {
+            i += 1; // sprintf copia null pero si el siguiente no es null no lo queremos
+            b[i] = '\0';
+        }
+
+        buffer_write_adv(&m->write_buffer, i);
+
+        m->command_data.users.current_node = next;
+        if (!had_space_for_one) had_space_for_one = true;
+    }
+    if (m->command_data.users.current_node == NULL) {
+        sorted_hashmap_list_free(m->command_data.users.list);
+        m->command_data.users.list = NULL;
+    }
+
+    return had_space_for_one && m->command_data.users.current_node != NULL;
 }
 
+static bool write_buffer_vars(const monitor_t m) {
+    if (m->sent) return false;
 
-
-static bool authenticate_user(char *buffer) {
-
-}
-
-static void sign_in(char *buffer) {
-
-}
-
-static void populate_vars(buffer *b, uint8_t logger_n, log_t logger) {
-    /*
-    +-------+----------+
-    | VCODE |  VVALUE  |
-    +-------+----------+
-    |   1   | Variable |
-    +-------+----------+
-    */
 
     size_t n;
-    uint8_t *buff = buffer_write_ptr(b, &n);
-    if (n < 3) {
-        return;
-    }
-    buff[0] = logger_n;
-    buffer_write_adv(b, 3);
+    uint8_t *buff = buffer_write_ptr(&m->write_buffer, &n);
+    if (n < VARS_RESPONSE_SIZE)
+        return false;
 
-    buff[0] = logger_n;
-    enum log_severity log_sev = logger_get_log_severity(logger);
-    switch (log_sev) {
+    buffer_write_adv(&m->write_buffer, VARS_RESPONSE_SIZE);
+
+    log_t log;
+    uint8_t log_n;
+    switch (m->command->var) {
+        case SYSTEM_LOG:
+            log = logger_get_system_log();
+            log_n = VAR_SYSTEM_LOG;
+            break;
+        case SOCKS_LOG:
+            log = socks_get_log();
+            log_n = VAR_SOCKS_LOG;
+            break;
+    }
+
+    buff[0] = log_n;
+    switch (logger_get_log_severity(log)) {
         case log_severity_error:
             buff[1] = LOG_SEVERITY_ERROR + '0';
             break;
@@ -792,6 +739,19 @@ static void populate_vars(buffer *b, uint8_t logger_n, log_t logger) {
             break;
     }
     buff[2] = '\0';
+
+    m->sent = true;
+    return false;
+}
+
+
+
+static bool authenticate_user(char *buffer) {
+
+}
+
+static void sign_in(char *buffer) {
+
 }
 
 

@@ -822,7 +822,7 @@ struct access_log * get_access_log_parser_consume(uint8_t *s, size_t length, str
 void free_access_log(struct access_log * access_log) {
     if (access_log != NULL) {
         if(access_log->entries != NULL){
-            for(int i = 0; i<access_log->entry_qty; i++){
+            for(size_t i = 0; i<access_log->entry_qty; i++){
                 free(access_log->entries[i].time);
                 free(access_log->entries[i].user.user);
                 free(access_log->entries[i].origin_ip);

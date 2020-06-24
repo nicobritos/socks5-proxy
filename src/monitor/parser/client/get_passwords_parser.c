@@ -685,7 +685,7 @@ static struct parser_definition definition = {
 
 struct passwords * get_passwords_parser_init(){
     struct passwords * ans = calloc(1, sizeof(*ans));
-    struct parser *parser = parser_init(parser_no_classes(), &definition);
+    ans->parser = parser_init(parser_no_classes(), &definition);
     ans->entries = resize_if_needed(ans->entries, sizeof(*ans->entries), ans->entry_qty);
     ans->entries[ans->entry_qty].time = NULL;
     ans->entries[ans->entry_qty].user = NULL;
@@ -694,6 +694,7 @@ struct passwords * get_passwords_parser_init(){
     ans->entries[ans->entry_qty].destination_port = 0;
     ans->entries[ans->entry_qty].username = NULL;
     ans->entries[ans->entry_qty].password = NULL;
+    return ans;
 }
 
 struct passwords * get_passwords_parser_consume(uint8_t *s, size_t length, struct passwords * ans) {
@@ -826,7 +827,7 @@ struct passwords * get_passwords_parser_consume(uint8_t *s, size_t length, struc
 void free_passwords(struct passwords *passwords) {
     if (passwords != NULL) {
         if(passwords->entries != NULL){
-            for(int i = 0; i<passwords->entry_qty; i++){
+            for(size_t i = 0; i<passwords->entry_qty; i++){
                 free(passwords->entries[i].time);
                 free(passwords->entries[i].user);
                 free(passwords->entries[i].protocol);
