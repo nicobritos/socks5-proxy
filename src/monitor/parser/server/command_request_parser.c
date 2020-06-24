@@ -7,13 +7,13 @@
 #define CHUNK_SIZE 10
 
 /* Funciones auxiliares */
-void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
+static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
 
-struct command *error(struct command *ans, parser_error_t error_type);
+static struct command *error(struct command *ans, parser_error_t error_type);
 
-parser_error_t add_to_string(char ** s, uint8_t c, size_t * current_length);
+static parser_error_t add_to_string(char ** s, uint8_t c, size_t * current_length);
 
-parser_error_t add_to_byte_array(uint8_t ** s, uint8_t c, size_t * current_length);
+static parser_error_t add_to_byte_array(uint8_t ** s, uint8_t c, size_t * current_length);
 
 // definición de maquina
 
@@ -261,14 +261,14 @@ void free_command(struct command *command) {
     }
 }
 
-struct command *error(struct command *ans, parser_error_t error_type) {
+static struct command *error(struct command *ans, parser_error_t error_type) {
     free_command(ans);
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;
     return ans;
 }
 
-parser_error_t add_to_string(char ** s, uint8_t c, size_t * current_length){
+static parser_error_t add_to_string(char ** s, uint8_t c, size_t * current_length){
     *s = resize_if_needed(*s, sizeof(**s), *current_length);
     if(*s == NULL){
         return REALLOC_ERROR;
@@ -278,7 +278,7 @@ parser_error_t add_to_string(char ** s, uint8_t c, size_t * current_length){
     return NO_ERROR;
 }
 
-parser_error_t add_to_byte_array(uint8_t ** s, uint8_t c, size_t * current_length){
+static parser_error_t add_to_byte_array(uint8_t ** s, uint8_t c, size_t * current_length){
     *s = resize_if_needed(*s, sizeof(**s), *current_length);
     if(*s == NULL){
         return REALLOC_ERROR;
@@ -288,7 +288,7 @@ parser_error_t add_to_byte_array(uint8_t ** s, uint8_t c, size_t * current_lengt
     return NO_ERROR;
 }
 
-void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
+static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
     if (current_length % CHUNK_SIZE == 0) {
         return realloc(ptr, ptr_size * (current_length + CHUNK_SIZE));
     }

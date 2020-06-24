@@ -7,13 +7,13 @@
 #define CHUNK_SIZE 10
 
 /* Funciones auxiliares */
-void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
+static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
 
-struct proxy_credentials *add_char_to_username(struct proxy_credentials *ans, char c, size_t *username_current_length);
+static struct proxy_credentials *add_char_to_username(struct proxy_credentials *ans, char c, size_t *username_current_length);
 
-struct proxy_credentials *add_char_to_password(struct proxy_credentials *ans, char c, size_t *password_current_length);
+static struct proxy_credentials *add_char_to_password(struct proxy_credentials *ans, char c, size_t *password_current_length);
 
-struct proxy_credentials *error(struct proxy_credentials *ans, parser_error_t error_type);
+static struct proxy_credentials *error(struct proxy_credentials *ans, parser_error_t error_type);
 
 // definición de maquina
 
@@ -167,7 +167,7 @@ void proxy_credentials_free(struct proxy_credentials *proxy_credentials) {
     }
 }
 
-struct proxy_credentials *
+static struct proxy_credentials *
 add_char_to_username(struct proxy_credentials *ans, char c, size_t *username_current_length) {
     ans->username = resize_if_needed(ans->username, sizeof(*(ans->username)), *username_current_length);
     if (ans->username == NULL) {
@@ -177,7 +177,7 @@ add_char_to_username(struct proxy_credentials *ans, char c, size_t *username_cur
     return ans;
 }
 
-struct proxy_credentials *
+static struct proxy_credentials *
 add_char_to_password(struct proxy_credentials *ans, char c, size_t *password_current_length) {
     ans->password = resize_if_needed(ans->password, sizeof(*(ans->password)), *password_current_length);
     if (ans->password == NULL) {
@@ -187,14 +187,14 @@ add_char_to_password(struct proxy_credentials *ans, char c, size_t *password_cur
     return ans;
 }
 
-struct proxy_credentials *error(struct proxy_credentials *ans, parser_error_t error_type) {
+static struct proxy_credentials *error(struct proxy_credentials *ans, parser_error_t error_type) {
     proxy_credentials_free(ans);
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;
     return ans;
 }
 
-void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
+static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
     if (current_length % CHUNK_SIZE == 0) {
         return realloc(ptr, ptr_size * (current_length + CHUNK_SIZE));
     }
