@@ -172,13 +172,13 @@ Configure and Monitor for SOCKS V5 Server
         		+ SOCKS LOG - Code 0x02
 
         o   VVALUE - Variable Value as string. It is null terminated
-                + SYS LOG
+                + SYS LOG - Varies vervosity
                     -> LOG_SEVERITY_DEBUG - 0x01
                     -> LOG_SEVERITY_INFO - 0x02
                     -> LOG_SEVERITY_WARNING - 0x03
                     -> LOG_SEVERITY_ERROR - 0x04
                 
-                + SOCKS LOG
+                + SOCKS LOG - Varies vervosity
                     -> LOG_SEVERITY_DEBUG - 0x01
                     -> LOG_SEVERITY_INFO - 0x02
                     -> LOG_SEVERITY_WARNING - 0x03
@@ -218,13 +218,13 @@ Configure and Monitor for SOCKS V5 Server
             + LMODE - 0x02 
 
         o   VVALUE - Variable Value as string. It is null terminated
-                + SYS LOG
+                + SYS LOG - Varies vervosity
                     -> LOG_SEVERITY_DEBUG - 0x01
                     -> LOG_SEVERITY_INFO - 0x02
                     -> LOG_SEVERITY_WARNING - 0x03
                     -> LOG_SEVERITY_ERROR - 0x04
                 
-                + SOCKS LOG
+                + SOCKS LOG -Varies vervosity
                     -> LOG_SEVERITY_DEBUG - 0x01
                     -> LOG_SEVERITY_INFO - 0x02
                     -> LOG_SEVERITY_WARNING - 0x03
