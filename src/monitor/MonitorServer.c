@@ -39,6 +39,8 @@
 #define LOG_SEVERITY_INFO 2
 #define LOG_SEVERITY_DEBUG 1
 
+#define METRICS_RESPONSE_SIZE 24
+
 /** maquina de estados general */
 enum monitor_state {
     /**
@@ -149,8 +151,6 @@ static const struct fd_handler monitor_handler = {
 static void read_init(unsigned state, struct selector_key *key);
 static unsigned read_do(struct selector_key *key);
 static void read_close(unsigned state, struct selector_key *key);
-static bool read_process(const monitor_t m);
-static void write_response(const monitor_t m);
 
 /** ---------------- WRITE ---------------- */
 static void write_init(unsigned state, struct selector_key *key);
@@ -158,7 +158,9 @@ static unsigned write_do(struct selector_key *key);
 static void write_close(unsigned state, struct selector_key *key);
 
 /** ---------------- AUX ---------------- */
-static bool write_data(monitor_t m);
+static bool write_response_buffer(monitor_t const m);
+static bool write_buffer_metrics(const monitor_t m);
+static bool write_buffer_access_log(const monitor_t m);
 
 static bool authenticate_user(char *buffer);
 static void sign_in(char *buffer);
@@ -338,121 +340,62 @@ static void close_fd_(int fd, struct selector_key* key) {
 
 /** ---------------- READ ---------------- */
 static void read_init(unsigned state, struct selector_key *key) {
-//    parser_init(&d->parser);
+    ATTACHMENT(key)->command = command_request_parser_init();
     ATTACHMENT(key)->sent = false;
 }
 
 static unsigned read_do(struct selector_key *key) {
     monitor_t m = ATTACHMENT(key);
-    unsigned ret = READ;
-    bool error = false;
     uint8_t *ptr;
     size_t count;
     ssize_t n;
 
+    if (m->command == NULL)
+        return ERROR;
     ptr = buffer_write_ptr(&m->read_buffer, &count);
     n = sctp_recvmsg(key->fd, ptr, count, (struct sockaddr *) NULL, 0, &m->sndrcvinfo, 0);
     if (n > 0) {
         buffer_write_adv(&m->read_buffer, n);
+        m->command = command_request_parser_consume(ptr, n, m->command);
+        if (m->command == NULL)
+            return ERROR;
+        if (m->command->error != NO_ERROR)
+            return ERROR;
+        // Como los requests pesan poco supongo que llega entero
         if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
-            m->command = command_request_parser(ptr, n);
-            ret = WRITE;
+            write_response_buffer(m);
+            return WRITE;
         } else {
-            ret = ERROR;
+            return ERROR;
         }
-        // TODO: Chunks y chequear errores
-//        parser_consume(d->read_buffer, &d->parser, &error);
-//        if (hello_is_done(st, NULL)) {
-//            if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
-//            } else {
-//                ret = ERROR;
-//            }
-//        }
     } else {
-        ret = ERROR;
+        return ERROR;
     }
-
-    return error ? ERROR : ret;
 }
 
 static void read_close(unsigned state, struct selector_key *key) {
-
+    if (ATTACHMENT(key)->command != NULL) {
+        free_command(ATTACHMENT(key)->command);
+        ATTACHMENT(key)->command = NULL;
+    }
 }
 
-static bool read_process(const monitor_t m) {
+/** ---------------- WRITE ---------------- */
+static void write_init(unsigned state, struct selector_key *key) {
+//    parser_init(&d->parser);
+}
+
+/**
+ * Devuelve true si hay datos para seguir escribiendo, false sino
+ * @param m
+ * @return
+ */
+static bool write_response_buffer(const monitor_t m) {
     switch (m->command->code) {
         case GET_METRICS:
-            if (m->sent)
-                return false;
-
-            size_t n;
-            uint8_t *buff = buffer_write_ptr(&m->write_buffer, &n);
-            if (n < 24) {
-                return false;
-            }
-            buffer_write_adv(&m->write_buffer, 24);
-
-            uint8_t i = 0;
-            uint8_t ib = 0;
-            while (i < sizeof(uint64_t)) {
-                buff[ib] = (socks_get_total_connections() >> ((sizeof(uint64_t) - i - 1) * 8)) & 0xFF;
-                i++;
-                ib++;
-            }
-            i = 0;
-            while (i < sizeof(uint64_t)) {
-                buff[ib] = (socks_get_current_connections() >> ((sizeof(uint64_t) - i - 1) * 8)) & 0xFF;
-                i++;
-                ib++;
-            }
-            i = 0;
-            while (i < sizeof(uint64_t)) {
-                buff[ib] = (socks_get_total_bytes_transferred() >> ((sizeof(uint64_t) - i - 1) * 8)) & 0xFF;
-                i++;
-                ib++;
-            }
-
-            m->sent = true;
-            return true;
+            return write_buffer_metrics(m);
         case GET_ACCESS_LOG:
-            if (m->sent && m->command_data.access_log.current_node == NULL)
-                return false;
-
-            if (m->command_data.access_log.current_node == NULL) {
-                m->command_data.access_log.current_node = socks_get_first_access_log_node();
-                m->sent = true;
-            }
-            if (m->command_data.access_log.current_node != NULL) {
-                struct socks_access_log_details_t *details = socks_get_access_log(m->command_data.access_log.current_node);
-
-                socks_access_log_node_t next = socks_get_next_access_log_node(m->command_data.access_log.current_node);
-                size_t n, i;
-                char *b = buffer_write_ptr(&m->write_buffer, &n);
-
-                i = sprintf(b, "%s", details->datetime);
-                b[i++] = '\0';
-                i += sprintf(b, "%s", details->username);
-                b[i++] = '\0';
-                i += sprintf(b, "A");
-                b[i++] = '\0';
-                i += sprintf(b, "%s", details->origin.ip);
-                b[i++] = '\0';
-                i += sprintf(b, "%s", details->origin.port);
-                b[i++] = '\0';
-                i += sprintf(b, "%s", details->destination.name);
-                b[i++] = '\0';
-                i += sprintf(b, "%s", details->destination.port);
-                b[i++] = '\0';
-                i += sprintf(b, "%d", details->status);
-                b[i++] = '\0';
-                if (next == NULL)
-                    b[i++] = '\0';
-
-                buffer_write_adv(&m->write_buffer, i);
-
-                m->command_data.access_log.current_node = next;
-            }
-            return true;
+            return write_buffer_access_log(m);
         case GET_PASSWORDS: {
             if (m->sent && m->command_data.passwords.current_node == NULL)
                 return false;
@@ -552,11 +495,6 @@ static bool read_process(const monitor_t m) {
     }
 }
 
-/** ---------------- READ ---------------- */
-static void write_init(unsigned state, struct selector_key *key) {
-//    parser_init(&d->parser);
-}
-
 static unsigned write_do(struct selector_key *key) {
     monitor_t m = ATTACHMENT(key);
     unsigned ret = WRITE;
@@ -571,7 +509,7 @@ static unsigned write_do(struct selector_key *key) {
     } else {
         buffer_read_adv(&m->write_buffer, n);
         if (!buffer_can_read(&m->write_buffer)) {
-            if (read_process(m)) {
+            if (write_response_buffer(m)) {
                 ret = WRITE;
             } else {
                 if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
@@ -592,6 +530,102 @@ static void write_close(unsigned state, struct selector_key *key) {
 
 
 /** ---------------- AUX ---------------- */
+static bool write_buffer_metrics(const monitor_t m) {
+    if (m->sent) return false;
+
+    size_t n;
+    uint8_t *buff = buffer_write_ptr(&m->write_buffer, &n);
+    if (n < METRICS_RESPONSE_SIZE)
+        return false;
+
+    buffer_write_adv(&m->write_buffer, METRICS_RESPONSE_SIZE);
+
+    uint8_t i = 0;
+    uint8_t ib = 0;
+    while (i < sizeof(uint64_t)) {
+        buff[ib] = (socks_get_total_connections() >> ((sizeof(uint64_t) - i - 1) * 8)) & 0xFF;
+        i++;
+        ib++;
+    }
+    i = 0;
+    while (i < sizeof(uint64_t)) {
+        buff[ib] = (socks_get_current_connections() >> ((sizeof(uint64_t) - i - 1) * 8)) & 0xFF;
+        i++;
+        ib++;
+    }
+    i = 0;
+    while (i < sizeof(uint64_t)) {
+        buff[ib] = (socks_get_total_bytes_transferred() >> ((sizeof(uint64_t) - i - 1) * 8)) & 0xFF;
+        i++;
+        ib++;
+    }
+
+    return m->sent = true;
+}
+
+static bool write_buffer_access_log(const monitor_t m) {
+    if (m->sent && m->command_data.access_log.current_node == NULL)
+        return false;
+
+    char *b;
+    size_t n, i;
+    if (m->command_data.access_log.current_node == NULL) {
+        m->command_data.access_log.current_node = socks_get_first_access_log_node();
+        if (m->command_data.access_log.current_node == NULL) {
+            b = (char *) buffer_write_ptr(&m->write_buffer, &n);
+            if (n < 2) // Necesitamos escribir un doble null (fin de entry, ver RFC)
+                return false;
+
+            b[0] = b[1] = '\0';
+            buffer_write_adv(&m->write_buffer, i);
+        }
+
+        m->sent = true;
+    }
+
+    struct socks_access_log_details_t *details = socks_get_access_log(m->command_data.access_log.current_node);
+
+    socks_access_log_node_t next = socks_get_next_access_log_node(m->command_data.access_log.current_node);
+    b = (char *) buffer_write_ptr(&m->write_buffer, &n);
+
+    // Tenemos que ver primero cuanto espacio necesitamos
+    // Uso el caracter '.' como separador de strings, representa
+    // el NULL en el RFC
+    size_t space_needed = snprintf(
+            NULL,
+            0,
+            "%s.%s.A.%s.%s.%s.%s.%s..",
+            "");
+
+    i = sprintf(b, "%s", details->datetime);
+    b[i++] = '\0';
+    i += sprintf(b, "%s", details->username);
+    b[i++] = '\0';
+    i += sprintf(b, "A");
+    b[i++] = '\0';
+    i += sprintf(b, "%s", details->origin.ip);
+    b[i++] = '\0';
+    i += sprintf(b, "%s", details->origin.port);
+    b[i++] = '\0';
+    i += sprintf(b, "%s", details->destination.name);
+    b[i++] = '\0';
+    i += sprintf(b, "%s", details->destination.port);
+    b[i++] = '\0';
+    i += sprintf(b, "%d", details->status);
+    b[i++] = '\0';
+    if (next == NULL)
+        b[i++] = '\0';
+
+    buffer_write_adv(&m->write_buffer, i);
+
+    m->command_data.access_log.current_node = next;
+    return true;
+}
+
+
+
+
+
 static bool authenticate_user(char *buffer) {
 
 }

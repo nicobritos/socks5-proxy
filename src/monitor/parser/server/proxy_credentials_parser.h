@@ -19,13 +19,19 @@ struct proxy_credentials {
     char * username;
     char * password;
     parser_error_t error;
+    struct parser *parser;
+    size_t username_length;
+    size_t password_length;
+    uint8_t finished;
 };
+
+struct proxy_credentials * proxy_credentials_parser_init();
 
 /**
  * Dado un datagrama (array de bytes) de autentificacion para el proxy y su longitud, parsea el datagrama
  * Si no cumple con el RFC devuelve INVALID_INPUT_FORMAT_ERROR en el campo de error de la estructura.
  */
-struct proxy_credentials * proxy_credentials_parser(uint8_t *s, size_t length);
+struct proxy_credentials * proxy_credentials_parser_consume(uint8_t *s, size_t length, struct proxy_credentials * ans);
 
 /**
  * Libera la memoria utilizada por la estructura, si proxy_credentials es NULL, no hace nada

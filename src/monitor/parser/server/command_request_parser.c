@@ -7,13 +7,13 @@
 #define CHUNK_SIZE 10
 
 /* Funciones auxiliares */
-void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
+static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length);
 
-struct command *error(struct command *ans, parser_error_t error_type);
+static struct command *error(struct command *ans, parser_error_t error_type);
 
-parser_error_t add_to_string(char ** s, uint8_t c, size_t * current_length);
+static parser_error_t add_to_string(char ** s, uint8_t c, size_t * current_length);
 
-parser_error_t add_to_byte_array(uint8_t ** s, uint8_t c, size_t * current_length);
+static parser_error_t add_to_byte_array(uint8_t ** s, uint8_t c, size_t * current_length);
 
 // definición de maquina
 
@@ -192,29 +192,29 @@ static struct parser_definition definition = {
         .start_state  = ST_CODE,
 };
 
-struct command * command_request_parser(uint8_t *s, size_t length) {
+struct command * command_request_parser_init(){
     struct command * ans = calloc(1, sizeof(*ans));
-    struct parser *parser = parser_init(parser_no_classes(), &definition);
-    size_t user_current_length = 0;
-    size_t pass_current_length = 0;
+    ans->parser = parser_init(parser_no_classes(), &definition);
+    return ans;
+}
+
+struct command * command_request_parser_consume(uint8_t *s, size_t length, struct command * ans) {
     parser_error_t ans_error = NO_ERROR;
     for (size_t i = 0; i<length; i++) {
-        const struct parser_event* ret = parser_feed(parser, s[i]);
+        const struct parser_event* ret = parser_feed(ans->parser, s[i]);
         switch (ret->type) {
             case COPY_CODE:
                 ans->code = s[i];
             break;
             case COPY_6_USER:
-                ans_error = add_to_string(&(ans->user), s[i], &user_current_length);
+                ans_error = add_to_string(&(ans->user), s[i], &(ans->user_current_length));
                 if(ans_error != NO_ERROR){
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
             case COPY_6_PASS:
-                ans_error = add_to_string(&(ans->password), s[i], &pass_current_length);
+                ans_error = add_to_string(&(ans->password), s[i], &(ans->pass_current_length));
                 if(ans_error != NO_ERROR){
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
@@ -227,23 +227,19 @@ struct command * command_request_parser(uint8_t *s, size_t length) {
             case COPY_7_IO_TIMEOUT:
                 ans_error = add_to_byte_array(&(ans->var_value), s[i], &(ans->var_value_length));
                 if(ans_error != NO_ERROR){
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
             case COPY_7_LMODE:
                 ans_error = add_to_byte_array(&(ans->var_value), s[i], &(ans->var_value_length));
                 if(ans_error != NO_ERROR){
-                    parser_destroy(parser);
                     return error(ans, ans_error);
                 }
             break;
             case INVALID_INPUT_FORMAT_T:
-                parser_destroy(parser);
                 return error(ans, INVALID_INPUT_FORMAT_ERROR);
         }
     }
-    parser_destroy(parser);
     return ans;
 }
 
@@ -258,18 +254,21 @@ void free_command(struct command *command) {
         if(command->var_value != NULL){
             free(command->var_value);
         }
+        if(command->parser != NULL){
+            parser_destroy(command->parser);
+        }
         free(command);
     }
 }
 
-struct command *error(struct command *ans, parser_error_t error_type) {
+static struct command *error(struct command *ans, parser_error_t error_type) {
     free_command(ans);
     ans = calloc(1, sizeof(*ans));
     ans->error = error_type;
     return ans;
 }
 
-parser_error_t add_to_string(char ** s, uint8_t c, size_t * current_length){
+static parser_error_t add_to_string(char ** s, uint8_t c, size_t * current_length){
     *s = resize_if_needed(*s, sizeof(**s), *current_length);
     if(*s == NULL){
         return REALLOC_ERROR;
@@ -279,7 +278,7 @@ parser_error_t add_to_string(char ** s, uint8_t c, size_t * current_length){
     return NO_ERROR;
 }
 
-parser_error_t add_to_byte_array(uint8_t ** s, uint8_t c, size_t * current_length){
+static parser_error_t add_to_byte_array(uint8_t ** s, uint8_t c, size_t * current_length){
     *s = resize_if_needed(*s, sizeof(**s), *current_length);
     if(*s == NULL){
         return REALLOC_ERROR;
@@ -289,7 +288,7 @@ parser_error_t add_to_byte_array(uint8_t ** s, uint8_t c, size_t * current_lengt
     return NO_ERROR;
 }
 
-void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
+static void *resize_if_needed(void *ptr, size_t ptr_size, size_t current_length) {
     if (current_length % CHUNK_SIZE == 0) {
         return realloc(ptr, ptr_size * (current_length + CHUNK_SIZE));
     }
