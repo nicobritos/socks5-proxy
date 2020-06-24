@@ -105,7 +105,7 @@ typedef struct monitor_t {
     } command_data;
 
     /** buffers para ser usados read_buffer, write_buffer */
-    uint8_t raw_buff_a[8*1024], raw_buff_b[8 * 1024];
+    uint8_t raw_buff_a[8 * 1024], raw_buff_b[8 * 1024];
     buffer read_buffer, write_buffer;
 
     /** cantidad de referencias a este objecto. == 1 -> eliminar */
@@ -128,8 +128,11 @@ static monitor_t pool = NULL;
 /** -------------------- DECLARATIONS --------------------- */
 /** ---------------- MONITOR ---------------- */
 static monitor_t monitor_new(int client_fd);
+
 static const struct state_definition *monitor_describe_states();
+
 static void monitor_destroy(monitor_t m);
+
 static void monitor_destroy_(monitor_t m);
 
 /**
@@ -138,10 +141,15 @@ static void monitor_destroy_(monitor_t m);
  * establecida entre un cliente y el proxy.
  */
 static void monitor_read(struct selector_key *key);
+
 static void monitor_write(struct selector_key *key);
+
 static void monitor_close(struct selector_key *key);
-static void monitor_done(struct selector_key* key);
-static void close_fd_(int fd, struct selector_key* key);
+
+static void monitor_done(struct selector_key *key);
+
+static void close_fd_(int fd, struct selector_key *key);
+
 static const struct fd_handler monitor_handler = {
         .handle_read   = monitor_read,
         .handle_write  = monitor_write,
@@ -150,25 +158,33 @@ static const struct fd_handler monitor_handler = {
 
 /** ---------------- READ ---------------- */
 static void read_init(unsigned state, struct selector_key *key);
+
 static unsigned read_do(struct selector_key *key);
+
 static void read_close(unsigned state, struct selector_key *key);
 
 /** ---------------- WRITE ---------------- */
 static void write_init(unsigned state, struct selector_key *key);
+
 static unsigned write_do(struct selector_key *key);
+
 static void write_close(unsigned state, struct selector_key *key);
 
 /** ---------------- AUX ---------------- */
 static bool write_response_buffer(monitor_t const m);
+
 static bool write_buffer_metrics(const monitor_t m);
+
 static bool write_buffer_access_log(const monitor_t m);
+
 static bool write_buffer_password(const monitor_t m);
+
 static bool write_buffer_users(const monitor_t m);
+
 static bool write_buffer_vars(const monitor_t m);
 
-static bool authenticate_user(char *buffer);
-static void sign_in(char *buffer);
-static void populate_vars(buffer *b, uint8_t logger_n, log_t logger);
+//static bool authenticate_user(char *buffer);
+//static void sign_in(char *buffer);
 
 /** ---------------- MONITOR HANDLERS ---------------- */
 static const struct state_definition client_statbl[] = {
@@ -177,14 +193,17 @@ static const struct state_definition client_statbl[] = {
                 .on_arrival       = read_init,
                 .on_departure     = read_close,
                 .on_read_ready    = read_do,
-        }, {
+        },
+        {
                 .state = WRITE,
                 .on_arrival       = write_init,
                 .on_departure     = write_close,
                 .on_write_ready   = write_do,
-        }, {
+        },
+        {
                 .state = DONE,
-        }, {
+        },
+        {
                 .state = ERROR
         }
 };
@@ -318,7 +337,7 @@ static void monitor_close(struct selector_key *key) {
     monitor_destroy(m);
 }
 
-static void monitor_done(struct selector_key* key) {
+static void monitor_done(struct selector_key *key) {
     /**
      * Cuando hacemos close_fd_ no sabemos si ya se libero el
      * socket, entonces nos guardamos las referencias. Si es 0
@@ -333,7 +352,7 @@ static void monitor_done(struct selector_key* key) {
     }
 }
 
-static void close_fd_(int fd, struct selector_key* key) {
+static void close_fd_(int fd, struct selector_key *key) {
     if (fd != -1) {
         if (SELECTOR_SUCCESS != selector_unregister_fd(key->s, fd)) {
             return;
@@ -410,9 +429,11 @@ static bool write_response_buffer(const monitor_t m) {
         case GET_VARS:
             return write_buffer_vars(m);
         case SET_USER:
-            break; // TODO
+//            break; // TODO
         case SET_VAR:
-            break;
+//            break;
+        default:
+            return false;
     }
 }
 
@@ -661,7 +682,8 @@ static bool write_buffer_users(const monitor_t m) {
 
     bool had_space_for_one = false;
     while (m->command_data.users.current_node != NULL) {
-        struct auth_user_pass_credentials *credentials = sorted_hashmap_list_get_element(m->command_data.users.current_node);
+        struct auth_user_pass_credentials *credentials = sorted_hashmap_list_get_element(
+                m->command_data.users.current_node);
 
         sorted_hashmap_list_node_t next = sorted_hashmap_list_get_next_node(m->command_data.users.current_node);
         b = (char *) buffer_write_ptr(&m->write_buffer, &n);
@@ -674,13 +696,13 @@ static bool write_buffer_users(const monitor_t m) {
                 0,
                 "%s.%c.",
                 credentials->username,
-                credentials->active ? '1' : '0');
+                '1');
         if (n < space_needed)
             break;
 
         i = sprintf(b + i, "%s", credentials->username);
         i += 1; // sprintf copia null
-        i += sprintf(b + i, "%c", credentials->active ? '1' : '0');
+        b[i++] = credentials->active ? 1 : 0;
         if (next == NULL) {
             i += 1; // sprintf copia null pero si el siguiente no es null no lo queremos
             b[i] = '\0';
@@ -745,20 +767,20 @@ static bool write_buffer_vars(const monitor_t m) {
 }
 
 
+//
+//static bool authenticate_user(char *buffer) {
+//
+//}
 
-static bool authenticate_user(char *buffer) {
-
-}
-
-static void sign_in(char *buffer) {
-
-}
-
-
+//static void sign_in(char *buffer) {
+//
+//}
 
 
-static char *user = "admin";
-static char *password = "adminadmin";
+
+
+//static char *user = "admin";
+//static char *password = "adminadmin";
 
 
 

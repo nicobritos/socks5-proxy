@@ -42,13 +42,6 @@ enum event_type {
 };
 
 static void
-next_state(struct parser_event *ret, const uint8_t c) {
-    ret->type = SUCCESS;
-    ret->n = 1;
-    ret->data[0] = c;
-}
-
-static void
 copy_code(struct parser_event *ret, const uint8_t c) {
     ret->type = COPY_CODE;
     ret->n = 1;
