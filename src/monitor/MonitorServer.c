@@ -356,6 +356,7 @@ static unsigned read_do(struct selector_key *key) {
         buffer_write_adv(&m->read_buffer, n);
         if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
             m->command = command_request_parser(ptr, n);
+//            read_process()
             ret = WRITE;
         } else {
             ret = ERROR;
@@ -379,7 +380,7 @@ static void read_close(unsigned state, struct selector_key *key) {
 
 }
 
-static bool read_process(const monitor_t m) {
+static bool write_data(const monitor_t m) {
     switch (m->command->code) {
         case GET_METRICS:
             if (m->sent)
